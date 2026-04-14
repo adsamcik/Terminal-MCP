@@ -1,11 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use dashmap::DashMap;
 use uuid::Uuid;
 
 use super::{Session, SessionConfig, SessionId, SessionInfo};
+
+/// Hard cap on concurrent sessions to prevent resource exhaustion.
+pub const MAX_SESSIONS: usize = 50;
 
 /// Manages the set of active terminal sessions.
 ///
@@ -24,7 +27,10 @@ impl SessionManager {
 
     /// Create a new terminal session, returning its metadata.
     pub fn create_session(&self, config: SessionConfig) -> Result<SessionInfo> {
-        let id = short_uuid();
+        if self.sessions.len() >= MAX_SESSIONS {
+            bail!("Maximum session limit ({MAX_SESSIONS}) reached");
+        }
+        let id = generate_id();
         let session =
             Session::new(id.clone(), config).context("Failed to create session")?;
         let info = tokio::task::block_in_place(|| {
@@ -36,7 +42,10 @@ impl SessionManager {
 
     /// Create a new terminal session (async version).
     pub async fn create_session_async(&self, config: SessionConfig) -> Result<SessionInfo> {
-        let id = short_uuid();
+        if self.sessions.len() >= MAX_SESSIONS {
+            bail!("Maximum session limit ({MAX_SESSIONS}) reached");
+        }
+        let id = generate_id();
         let session =
             Session::new(id.clone(), config).context("Failed to create session")?;
         let info = session.info().await;
@@ -114,10 +123,19 @@ impl SessionManager {
     /// Sessions that have been idle (no PTY output) longer than
     /// `idle_timeout` are automatically closed.  The task runs every 30 s.
     pub fn start_cleanup_task(&self, idle_timeout: Duration) -> tokio::task::JoinHandle<()> {
+        self.start_cleanup_task_with_interval(idle_timeout, Duration::from_secs(30))
+    }
+
+    /// Start a background task that periodically closes idle sessions with a custom interval.
+    pub fn start_cleanup_task_with_interval(
+        &self,
+        idle_timeout: Duration,
+        poll_interval: Duration,
+    ) -> tokio::task::JoinHandle<()> {
         let sessions = self.sessions.clone();
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                tokio::time::sleep(poll_interval).await;
                 let mut to_remove = Vec::new();
 
                 for entry in sessions.iter() {
@@ -133,10 +151,13 @@ impl SessionManager {
                             Ok(s) => {
                                 let _ = s.close().await;
                             }
-                            Err(_) => {
+                            Err(arc) => {
+                                arc.cancel.cancel();
+                                let pty = arc.pty.lock().await;
+                                let _ = pty.kill();
                                 tracing::warn!(
                                     session_id = %id,
-                                    "Session Arc has extra refs during cleanup, dropped"
+                                    "Session had active references during cleanup; forcing shutdown"
                                 );
                             }
                         }
@@ -147,7 +168,21 @@ impl SessionManager {
     }
 }
 
-/// Generate a short 8-character hex ID from a UUID v4.
-fn short_uuid() -> String {
-    Uuid::new_v4().simple().to_string()[..8].to_string()
+/// Generate a full 32-character hex ID from a UUID v4.
+fn generate_id() -> String {
+    Uuid::new_v4().simple().to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_sessions_is_fifty() {
+        assert_eq!(MAX_SESSIONS, 50);
+    }
 }

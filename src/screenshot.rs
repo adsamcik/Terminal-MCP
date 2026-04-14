@@ -1,6 +1,8 @@
 //! Renders terminal screen state to a PNG image using `fontdue` for glyph
 //! rasterization and `tiny-skia` for compositing.
 
+use std::sync::OnceLock;
+
 use anyhow::{Context, Result};
 use fontdue::{Font, FontSettings};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Rect, Transform};
@@ -9,6 +11,15 @@ use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Rect, Transform};
 
 const FONT_REGULAR: &[u8] = include_bytes!("../assets/Cousine-Regular.ttf");
 const FONT_BOLD: &[u8] = include_bytes!("../assets/Cousine-Bold.ttf");
+
+// ── Resource limits ────────────────────────────────────────────────────────
+
+/// Hard limit on rendered image area to prevent excessive memory allocation.
+pub const MAX_SCREENSHOT_PIXELS: u32 = 16_000_000;
+/// Maximum render scale factor accepted (clamped, not rejected).
+pub const MAX_SCALE: f32 = 4.0;
+/// Maximum font size in pixels accepted (clamped, not rejected).
+pub const MAX_FONT_SIZE: u32 = 72;
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 
@@ -144,7 +155,54 @@ fn fill_rect(pixmap: &mut Pixmap, x: u32, y: u32, w: u32, h: u32, rgba: [u8; 4])
     pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
 }
 
+// ── Cached font parsing ───────────────────────────────────────────────────
+
+static FONT_REGULAR_PARSED: OnceLock<Font> = OnceLock::new();
+static FONT_BOLD_PARSED: OnceLock<Font> = OnceLock::new();
+
+fn get_regular_font() -> &'static Font {
+    FONT_REGULAR_PARSED.get_or_init(|| {
+        Font::from_bytes(FONT_REGULAR, FontSettings::default())
+            .expect("embedded regular font is valid")
+    })
+}
+
+fn get_bold_font() -> &'static Font {
+    FONT_BOLD_PARSED.get_or_init(|| {
+        Font::from_bytes(FONT_BOLD, FontSettings::default())
+            .expect("embedded bold font is valid")
+    })
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
+
+/// Preflight check for screenshot parameters before acquiring any VT lock.
+///
+/// Returns an error if the projected pixel area would exceed the budget.
+/// `font_size` and `scale` are clamped to their permitted ranges before the
+/// pixel estimate is computed, matching the behavior of `render_screenshot`.
+pub fn preflight_screenshot(rows: u16, cols: u16, font_size: u32, scale: f32) -> Result<()> {
+    let font_size = font_size.clamp(6, MAX_FONT_SIZE);
+    let scale = if scale.is_finite() {
+        scale.clamp(0.5, MAX_SCALE)
+    } else {
+        1.0
+    };
+    let px_size = font_size as f32 * scale;
+    let est_cell_w = (px_size * 0.65_f32).ceil().max(1.0) as u64;
+    let est_cell_h = (px_size * 1.25_f32).ceil().max(1.0) as u64;
+    let padding = ((8.0_f32 * scale).ceil() as u64) * 2;
+    let est_pixels = (est_cell_w * cols as u64 + padding)
+        .saturating_mul(est_cell_h * rows as u64 + padding);
+    if est_pixels > MAX_SCREENSHOT_PIXELS as u64 {
+        anyhow::bail!(
+            "Screenshot would exceed pixel budget of {} pixels \
+             (estimated ~{} px for {}×{} terminal at font size {} scale {:.1})",
+            MAX_SCREENSHOT_PIXELS, est_pixels, cols, rows, font_size, scale
+        );
+    }
+    Ok(())
+}
 
 /// Render the current terminal screen to a PNG image.
 ///
@@ -155,33 +213,41 @@ pub fn render_screenshot(
     font_size: u32,
     scale: f32,
 ) -> Result<Vec<u8>> {
+    // Clamp inputs to safe ranges to prevent excessive memory allocation.
+    let font_size = font_size.clamp(6, MAX_FONT_SIZE);
+    let scale = if scale.is_finite() {
+        scale.clamp(0.5, MAX_SCALE)
+    } else {
+        1.0
+    };
+
     let theme = get_theme(theme_name);
     let (rows, cols) = screen.size();
 
-    // -- Load fonts ----------------------------------------------------------
+    // -- Pixel budget preflight (before font loading) ------------------------
+    // Estimate cell dimensions from px_size to detect obvious oversize cases
+    // before paying the cost of font setup.
+    let px_size = font_size as f32 * scale;
+    let est_cell_w = (px_size * 0.65_f32).ceil().max(1.0) as u64;
+    let est_cell_h = (px_size * 1.25_f32).ceil().max(1.0) as u64;
+    let padding_est = ((8.0_f32 * scale).ceil() as u64) * 2;
+    let est_pixels = (est_cell_w * cols as u64 + padding_est)
+        .saturating_mul(est_cell_h * rows as u64 + padding_est);
+    if est_pixels > MAX_SCREENSHOT_PIXELS as u64 {
+        anyhow::bail!(
+            "Screenshot would exceed pixel budget of {} pixels (estimated ~{} px for {}×{} terminal at font size {} scale {:.1})",
+            MAX_SCREENSHOT_PIXELS, est_pixels, cols, rows, font_size, scale
+        );
+    }
 
-    let font_regular = Font::from_bytes(
-        FONT_REGULAR,
-        FontSettings {
-            scale: font_size as f32 * scale,
-            ..Default::default()
-        },
-    )
-    .map_err(|e| anyhow::anyhow!("failed to load regular font: {e}"))?;
+    // -- Fonts (parsed once, reused across calls) ----------------------------
 
-    let font_bold = Font::from_bytes(
-        FONT_BOLD,
-        FontSettings {
-            scale: font_size as f32 * scale,
-            ..Default::default()
-        },
-    )
-    .map_err(|e| anyhow::anyhow!("failed to load bold font: {e}"))?;
+    let font_regular = get_regular_font();
+    let font_bold = get_bold_font();
 
     // -- Cell geometry -------------------------------------------------------
     // Use metrics from the font to derive cell sizes.
 
-    let px_size = font_size as f32 * scale;
     let metrics = font_regular.horizontal_line_metrics(px_size).unwrap_or(
         fontdue::LineMetrics {
             ascent: px_size * 0.8,
@@ -198,8 +264,22 @@ pub fn render_screenshot(
     let baseline = metrics.ascent.ceil() as i32;
 
     let padding: u32 = (8.0 * scale).ceil() as u32;
-    let img_width = cell_width * cols as u32 + padding * 2;
-    let img_height = cell_height * rows as u32 + padding * 2;
+    let img_width = cell_width
+        .saturating_mul(cols as u32)
+        .saturating_add(padding.saturating_mul(2));
+    let img_height = cell_height
+        .saturating_mul(rows as u32)
+        .saturating_add(padding.saturating_mul(2));
+
+    // Exact pixel budget check using actual geometry.
+    if img_width.saturating_mul(img_height) > MAX_SCREENSHOT_PIXELS {
+        anyhow::bail!(
+            "Screenshot dimensions {}×{} ({} pixels) exceed budget of {} pixels",
+            img_width, img_height,
+            img_width.saturating_mul(img_height),
+            MAX_SCREENSHOT_PIXELS
+        );
+    }
 
     // -- Create pixmap -------------------------------------------------------
 
@@ -462,6 +542,75 @@ mod tests {
         let screen = parser.screen();
         let result = render_screenshot(screen, "dark", 14, 2.0);
         assert!(result.is_ok());
+    }
+
+    // -- preflight_screenshot tests ------------------------------------------
+
+    #[test]
+    fn preflight_ok_for_small_terminal() {
+        // 24×80 at default font/scale should always pass.
+        assert!(preflight_screenshot(24, 80, 14, 1.0).is_ok());
+    }
+
+    #[test]
+    fn preflight_rejects_oversized_pixels() {
+        // Large terminal + high scale should exceed the pixel budget.
+        // 300 rows × 500 cols × 72 font × 4.0 scale → well over 16 MP.
+        let result = preflight_screenshot(300, 500, 72, 4.0);
+        assert!(result.is_err(), "Expected pixel-budget rejection");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("pixel budget"),
+            "Error should mention pixel budget, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn preflight_clamps_oversized_font_before_estimating() {
+        // font_size = 999 should be clamped to MAX_FONT_SIZE=72.
+        // A 5×10 terminal with font 999 would be huge, but after clamp to 72
+        // and scale 1.0 it should still pass.
+        assert!(preflight_screenshot(5, 10, 999, 1.0).is_ok());
+    }
+
+    #[test]
+    fn preflight_clamps_oversized_scale_before_estimating() {
+        // scale = 999.0 should be clamped to MAX_SCALE=4.0.
+        // 5×10 at 14pt × 4.0 is fine.
+        assert!(preflight_screenshot(5, 10, 14, 999.0).is_ok());
+    }
+
+    #[test]
+    fn preflight_handles_non_finite_scale() {
+        // NaN/inf scale should be treated as 1.0.
+        assert!(preflight_screenshot(24, 80, 14, f32::NAN).is_ok());
+        assert!(preflight_screenshot(24, 80, 14, f32::INFINITY).is_ok());
+    }
+
+    #[test]
+    fn render_screenshot_rejects_huge_terminal() {
+        // A very large terminal with big font should be rejected before pixmap alloc.
+        let parser = vt100::Parser::new(300, 500, 0);
+        let screen = parser.screen();
+        let result = render_screenshot(screen, "dark", 72, 4.0);
+        assert!(result.is_err(), "Expected pixel-budget rejection");
+    }
+
+    #[test]
+    fn render_screenshot_clamps_font_size() {
+        // Oversized font should be clamped to MAX_FONT_SIZE, not panic.
+        let parser = vt100::Parser::new(3, 10, 0);
+        let screen = parser.screen();
+        // font_size 999 clamped to 72; should still render successfully.
+        assert!(render_screenshot(screen, "dark", 999, 1.0).is_ok());
+    }
+
+    #[test]
+    fn render_screenshot_clamps_scale() {
+        // Oversized scale should be clamped to MAX_SCALE, not panic.
+        let parser = vt100::Parser::new(3, 10, 0);
+        let screen = parser.screen();
+        assert!(render_screenshot(screen, "dark", 14, 999.0).is_ok());
     }
 }
 

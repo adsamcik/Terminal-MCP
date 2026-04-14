@@ -158,11 +158,11 @@ pub struct GetScrollbackParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[schemars(description = "Wait for a pattern to appear in terminal output")]
+#[schemars(description = "Wait for a pattern to appear in terminal output, or for a target number of new lines")]
 pub struct WaitForParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
-    #[schemars(description = "Text or regex pattern to wait for")]
+    #[schemars(description = "Text or regex pattern to wait for. Optional if line_count is provided")]
     pub pattern: Option<String>,
     #[schemars(
         description = "Wait until this many new lines of output appear. Alternative to pattern matching."
@@ -179,7 +179,7 @@ pub struct WaitForParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[schemars(description = "Wait for the terminal to become idle (no new output)")]
+#[schemars(description = "Wait for the terminal to become idle based on output silence or screen stability")]
 pub struct WaitForIdleParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
@@ -239,13 +239,7 @@ pub struct TerminalMcpServer {
 // Tool implementations (stubs)
 // ---------------------------------------------------------------------------
 
-fn not_implemented(tool_name: &str) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::error(vec![Content::text(format!(
-        "{tool_name}: not yet implemented"
-    ))]))
-}
-
-/// Extract image dimensions from PNG IHDR chunk.
+/// Extractimage dimensions from PNG IHDR chunk.
 /// PNG format: 8-byte signature, then IHDR chunk with width (4 bytes BE) and height (4 bytes BE).
 fn png_dimensions(data: &[u8]) -> (u32, u32) {
     if data.len() < 24 {
@@ -275,7 +269,11 @@ impl TerminalMcpServer {
         params: Parameters<CreateSessionParams>,
     ) -> Result<CallToolResult, McpError> {
         match crate::tools::lifecycle::handle_create_session(&self.session_manager, &params.0).await {
-            Ok(value) => Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&value).unwrap())])),
+            Ok(value) => {
+                let json = serde_json::to_string_pretty(&value)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::success(vec![Content::text(json)]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("create_session error: {e:#}"))])),
         }
     }
@@ -287,7 +285,11 @@ impl TerminalMcpServer {
         params: Parameters<CloseSessionParams>,
     ) -> Result<CallToolResult, McpError> {
         match crate::tools::lifecycle::handle_close_session(&self.session_manager, &params.0.session_id).await {
-            Ok(value) => Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&value).unwrap())])),
+            Ok(value) => {
+                let json = serde_json::to_string_pretty(&value)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::success(vec![Content::text(json)]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("close_session error: {e:#}"))])),
         }
     }
@@ -299,7 +301,11 @@ impl TerminalMcpServer {
         _params: Parameters<ListSessionsParams>,
     ) -> Result<CallToolResult, McpError> {
         match crate::tools::lifecycle::handle_list_sessions(&self.session_manager).await {
-            Ok(value) => Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&value).unwrap())])),
+            Ok(value) => {
+                let json = serde_json::to_string_pretty(&value)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::success(vec![Content::text(json)]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("list_sessions error: {e:#}"))])),
         }
     }
@@ -316,7 +322,11 @@ impl TerminalMcpServer {
         })?;
         let press_enter = params.0.press_enter.unwrap_or(false);
         match crate::tools::input::handle_send_text(&session, &params.0.text, press_enter, params.0.delay_between_ms).await {
-            Ok(value) => Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&value).unwrap())])),
+            Ok(value) => {
+                let json = serde_json::to_string_pretty(&value)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::success(vec![Content::text(json)]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("send_text error: {e:#}"))])),
         }
     }
@@ -332,7 +342,11 @@ impl TerminalMcpServer {
             McpError::invalid_params(format!("Session not found: {e}"), None)
         })?;
         match crate::tools::input::handle_send_keys(&session, &params.0.keys).await {
-            Ok(value) => Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&value).unwrap())])),
+            Ok(value) => {
+                let json = serde_json::to_string_pretty(&value)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::success(vec![Content::text(json)]))
+            }
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("send_keys error: {e:#}"))])),
         }
     }
@@ -437,6 +451,15 @@ impl TerminalMcpServer {
         let font_size = p.font_size.unwrap_or(14);
         let scale = p.scale.unwrap_or(1.0) as f32;
 
+        // Preflight: reject oversized render parameters before acquiring the VT lock.
+        crate::screenshot::preflight_screenshot(
+            session.config.rows,
+            session.config.cols,
+            font_size,
+            scale,
+        )
+        .map_err(|e| McpError::invalid_params(format!("Screenshot preflight failed: {e}"), None))?;
+
         let (png_bytes, terminal_rows, terminal_cols) = session
             .with_vt(|vt| {
                 let screen = vt.screen();
@@ -487,8 +510,8 @@ impl TerminalMcpServer {
         Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
     }
 
-    /// Wait for a pattern to appear in terminal output. Does not send any input.
-    #[tool(description = "Wait for a pattern to appear in terminal output. Does not send any input. Use for monitoring long-running processes, waiting for prompts, or detecting errors.")]
+    /// Wait for a pattern or a target line count in terminal output. Does not send any input.
+    #[tool(description = "Wait for a pattern to appear in terminal output, or for a target number of new output lines. Does not send any input. Use for monitoring long-running processes, waiting for prompts, or detecting errors.")]
     async fn wait_for(
         &self,
         params: Parameters<WaitForParams>,
@@ -513,8 +536,8 @@ impl TerminalMcpServer {
         Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
     }
 
-    /// Wait for the terminal to become idle (no new output for a specified duration).
-    #[tool(description = "Wait for the terminal to become idle (no new output for a specified duration). Use when you don't know the exact completion pattern.")]
+    /// Wait for the terminal to become idle based on output silence or screen stability.
+    #[tool(description = "Wait for the terminal to become idle (no new output for a specified duration). Optionally watch for the visible screen to stop changing instead, which is more reliable for some TUI apps. Use when you don't know the exact completion pattern.")]
     async fn wait_for_idle(
         &self,
         params: Parameters<WaitForIdleParams>,
@@ -574,6 +597,7 @@ impl TerminalMcpServer {
         let idle_ms = session.idle_duration_ms().await;
         let args = session.config.args.clone();
         let cwd = session.config.cwd.as_deref();
+        let shell_integration_status = session.shell_integration_status_str().await;
 
         let resp = session
             .with_vt(|vt| {
@@ -583,7 +607,7 @@ impl TerminalMcpServer {
                     &args,
                     cwd,
                     idle_ms,
-                    "unavailable",
+                    &shell_integration_status,
                 )
             })
             .await;
@@ -633,7 +657,7 @@ impl ServerHandler for TerminalMcpServer {
     fn get_info(&self) -> ServerInfo {
         let mut server_impl = Implementation::default();
         server_impl.name = "terminal-mcp".to_string();
-        server_impl.version = "0.1.0".to_string();
+        server_impl.version = env!("CARGO_PKG_VERSION").to_string();
 
         ServerInfo::new(
             ServerCapabilities::builder()
@@ -668,6 +692,10 @@ pub async fn run() -> Result<()> {
     tracing::info!("MCP server starting on stdio");
 
     let server = TerminalMcpServer::new();
+    // Start idle-session cleanup: reap sessions idle for more than 1 hour.
+    server
+        .session_manager
+        .start_cleanup_task(std::time::Duration::from_secs(3600));
     let service = server.serve(stdio()).await.inspect_err(|e| {
         tracing::error!("MCP serve error: {:?}", e);
     })?;
