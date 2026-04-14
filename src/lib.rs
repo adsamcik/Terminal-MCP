@@ -1,0 +1,12 @@
+pub mod error_detection;
+pub mod keys;
+pub mod logging;
+pub mod output;
+pub mod screenshot;
+pub mod scrollback;
+pub mod server;
+pub mod session;
+pub mod shell_integration;
+pub mod terminal;
+pub mod tools;
+pub mod wsl;
