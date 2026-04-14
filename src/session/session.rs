@@ -364,9 +364,13 @@ impl Session {
         // If not cached yet but process is dead, try to get it now
         if !self.is_alive().await {
             let pty = self.pty.lock().await;
+            // Re-check cache — reader task may have populated it while we
+            // were waiting for the pty lock.
+            let mut ec = self.exit_code.lock().await;
+            if ec.is_some() {
+                return *ec;
+            }
             if let Some(code) = pty.try_exit_code() {
-                drop(pty);
-                let mut ec = self.exit_code.lock().await;
                 *ec = Some(code);
                 return Some(code);
             }

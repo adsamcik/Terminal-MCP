@@ -5,17 +5,35 @@ use crate::keys::key_to_bytes;
 use crate::session::Session;
 
 /// Write text to a session's PTY stdin, optionally pressing Enter afterwards.
+/// If `delay_between_ms` is set, characters are sent one at a time with the
+/// specified delay between them (useful for timing-sensitive TUI input).
 pub async fn handle_send_text(
     session: &Session,
     text: &str,
     press_enter: bool,
+    delay_between_ms: Option<u64>,
 ) -> Result<serde_json::Value> {
-    let mut bytes = text.as_bytes().to_vec();
-    if press_enter {
-        bytes.push(0x0d); // \r
+    if let Some(delay_ms) = delay_between_ms {
+        let delay = std::time::Duration::from_millis(delay_ms);
+        for ch in text.chars() {
+            let mut buf = [0u8; 4];
+            let bytes = ch.encode_utf8(&mut buf);
+            session.write_bytes(bytes.as_bytes()).await?;
+            tokio::time::sleep(delay).await;
+        }
+    } else {
+        session.write_bytes(text.as_bytes()).await?;
     }
-    session.write_bytes(&bytes).await?;
-    Ok(json!({ "sent": bytes.len(), "status": "ok" }))
+
+    if press_enter {
+        session.write_bytes(&[0x0d]).await?;
+    }
+
+    Ok(json!({
+        "sent": text.len(),
+        "status": "ok",
+        "delay_between_ms": delay_between_ms,
+    }))
 }
 
 /// Send a sequence of named keystrokes (e.g. "Ctrl+C", "Up", "Enter") to

@@ -67,6 +67,12 @@ pub fn key_to_bytes(key: &str, application_cursor: bool) -> Option<Vec<u8>> {
             Some(result)
         }
 
+        // Single character — send as-is (supports "q", "a", "1", etc.)
+        _ if k.chars().count() == 1 => {
+            let mut buf = [0u8; 4];
+            let s = k.chars().next().unwrap().encode_utf8(&mut buf);
+            Some(s.as_bytes().to_vec())
+        }
         _ => None,
     }
 }
@@ -74,7 +80,12 @@ pub fn key_to_bytes(key: &str, application_cursor: bool) -> Option<Vec<u8>> {
 /// Normalize a key name to title-case for matching.
 /// "ctrl+c" → "Ctrl+c", "ENTER" → "Enter", "shift+tab" → "Shift+Tab", "f1" → "F1"
 fn normalize_key(key: &str) -> String {
-    let lower = key.to_lowercase();
+    let trimmed = key.trim();
+    // Single character keys — preserve case
+    if trimmed.chars().count() == 1 {
+        return trimmed.to_string();
+    }
+    let lower = trimmed.to_lowercase();
     match lower.as_str() {
         "enter" => "Enter".to_string(),
         "tab" => "Tab".to_string(),
@@ -305,5 +316,24 @@ mod tests {
     fn normalize_key_preserves_unknown() {
         // Unknown keys pass through as-is
         assert_eq!(normalize_key("xyz"), "xyz");
+    }
+
+    // ── Single-character plain key tests ──────────────────────────
+
+    #[test]
+    fn single_char_plain_letter() {
+        assert_eq!(key_to_bytes("q", false), Some(vec![b'q']));
+        assert_eq!(key_to_bytes("Q", false), Some(vec![b'Q']));
+    }
+
+    #[test]
+    fn single_char_digit() {
+        assert_eq!(key_to_bytes("1", false), Some(vec![b'1']));
+    }
+
+    #[test]
+    fn single_char_special() {
+        assert_eq!(key_to_bytes(".", false), Some(vec![b'.']));
+        assert_eq!(key_to_bytes("/", false), Some(vec![b'/']));
     }
 }
