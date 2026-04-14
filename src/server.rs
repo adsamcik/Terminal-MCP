@@ -65,6 +65,8 @@ pub struct SendTextParams {
     pub text: String,
     #[schemars(description = "If true, press Enter after typing the text (default: false)")]
     pub press_enter: Option<bool>,
+    #[schemars(description = "Delay in milliseconds between each character. Useful for testing timing-sensitive input like double-tap sequences. If omitted, all characters are sent at once.")]
+    pub delay_between_ms: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -194,6 +196,15 @@ pub struct WaitForIdleParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[schemars(description = "Wait for the child process to exit and return its exit code")]
+pub struct WaitForExitParams {
+    #[schemars(description = "Target session identifier")]
+    pub session_id: String,
+    #[schemars(description = "Maximum milliseconds to wait (default: 30000)")]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "Get detailed session metadata and capabilities")]
 pub struct GetSessionInfoParams {
     #[schemars(description = "Target session identifier")]
@@ -304,7 +315,7 @@ impl TerminalMcpServer {
             McpError::invalid_params(format!("Session not found: {e}"), None)
         })?;
         let press_enter = params.0.press_enter.unwrap_or(false);
-        match crate::tools::input::handle_send_text(&session, &params.0.text, press_enter).await {
+        match crate::tools::input::handle_send_text(&session, &params.0.text, press_enter, params.0.delay_between_ms).await {
             Ok(value) => Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&value).unwrap())])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("send_text error: {e:#}"))])),
         }
@@ -519,6 +530,28 @@ impl TerminalMcpServer {
             p.stable_ms.unwrap_or(1_000),
             p.timeout_ms.unwrap_or(30_000),
             p.screen_stable.unwrap_or(false),
+        )
+        .await
+        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+    }
+
+    /// Wait for the child process to exit and return its exit code.
+    #[tool(description = "Wait for the child process in a terminal session to exit. Returns the exit code. Use when you need to verify a process completed successfully.")]
+    async fn wait_for_exit(
+        &self,
+        params: Parameters<WaitForExitParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let p = &params.0;
+        let session = self
+            .session_manager
+            .get_session(&p.session_id)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+
+        let result = automation::handle_wait_for_exit(
+            &session,
+            p.timeout_ms.unwrap_or(30_000),
         )
         .await
         .map_err(|e| McpError::internal_error(e.to_string(), None))?;

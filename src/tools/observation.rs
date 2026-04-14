@@ -349,13 +349,7 @@ pub async fn handle_read_output(
         visible: true,
     };
 
-    // Exit code: if process is no longer alive, report no code (we don't
-    // have access to the code without closing the session).
-    let exit_code = if !session.is_alive().await {
-        Some(0) // process exited; exact code unavailable without close()
-    } else {
-        None
-    };
+    let exit_code = session.exit_code().await;
 
     Ok(ReadOutputResponse {
         output,

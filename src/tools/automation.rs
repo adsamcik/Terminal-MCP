@@ -270,6 +270,35 @@ pub async fn handle_wait_for_idle(
     }
 }
 
+/// Wait for the child process to exit and return its exit code.
+pub async fn handle_wait_for_exit(
+    session: &Session,
+    timeout_ms: u64,
+) -> Result<serde_json::Value> {
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+
+    loop {
+        if !session.is_alive().await {
+            let exit_code = session.exit_code().await;
+            return Ok(json!({
+                "exited": true,
+                "exit_code": exit_code,
+                "timed_out": false,
+            }));
+        }
+
+        if Instant::now() >= deadline {
+            return Ok(json!({
+                "exited": false,
+                "exit_code": null,
+                "timed_out": true,
+            }));
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
 /// Strip ANSI escape sequences from text for cleaner output.
 fn strip_ansi(text: &str) -> String {
     // Match CSI sequences, OSC sequences, and simple ESC sequences

@@ -92,6 +92,8 @@ pub struct Session {
     created_at: Instant,
     /// Updated every time new PTY output arrives.
     last_activity: Arc<Mutex<Instant>>,
+    /// Cached exit code, set when the reader task detects EOF.
+    exit_code: Arc<Mutex<Option<i32>>>,
     /// Cancels the background reader task on close/drop.
     pub(crate) cancel: CancellationToken,
 }
@@ -132,6 +134,7 @@ impl Session {
             ))),
             created_at: now,
             last_activity: Arc::new(Mutex::new(now)),
+            exit_code: Arc::new(Mutex::new(None)),
             cancel: cancel.clone(),
         };
 
@@ -148,6 +151,8 @@ impl Session {
         let output_log = Arc::clone(&self.output_log);
         let last_activity = Arc::clone(&self.last_activity);
         let scrollback_buf = Arc::clone(&self.scrollback_buf);
+        let pty_for_exit = Arc::clone(&self.pty);
+        let exit_code_store = Arc::clone(&self.exit_code);
 
         tokio::spawn(async move {
             loop {
@@ -181,6 +186,14 @@ impl Session {
                     }
                     None => {
                         tracing::debug!("PTY reader reached EOF");
+                        // Try to capture exit code before returning
+                        if let Ok(pty_guard) = pty_for_exit.try_lock() {
+                            if let Some(code) = pty_guard.try_exit_code() {
+                                let mut ec = exit_code_store.lock().await;
+                                *ec = Some(code);
+                                tracing::debug!(exit_code = code, "Captured exit code at EOF");
+                            }
+                        }
                         return;
                     }
                 }
@@ -339,12 +352,35 @@ impl Session {
         pty.is_alive()
     }
 
+    /// The cached exit code of the child process, if it has exited.
+    pub async fn exit_code(&self) -> Option<i32> {
+        // First check cache
+        let cached = self.exit_code.lock().await;
+        if cached.is_some() {
+            return *cached;
+        }
+        drop(cached);
+
+        // If not cached yet but process is dead, try to get it now
+        if !self.is_alive().await {
+            let pty = self.pty.lock().await;
+            if let Some(code) = pty.try_exit_code() {
+                drop(pty);
+                let mut ec = self.exit_code.lock().await;
+                *ec = Some(code);
+                return Some(code);
+            }
+        }
+        None
+    }
+
     /// Build a `SessionInfo` snapshot for the current state.
     pub async fn info(&self) -> SessionInfo {
         let alive = self.is_alive().await;
         let pid = self.pid().await;
         let idle = self.is_idle(Duration::from_secs(2)).await;
 
+        let exit_code = self.exit_code().await;
         let status = if alive {
             if idle {
                 SessionStatus::Idle
@@ -352,7 +388,7 @@ impl Session {
                 SessionStatus::Running
             }
         } else {
-            SessionStatus::Exited { code: None }
+            SessionStatus::Exited { code: exit_code }
         };
 
         let command = self

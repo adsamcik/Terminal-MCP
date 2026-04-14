@@ -217,6 +217,19 @@ impl PtyDriver {
         }
     }
 
+    /// Try to get the exit code if the child has exited.
+    /// Returns None if still running or if the code cannot be determined.
+    pub fn try_exit_code(&self) -> Option<i32> {
+        if let Ok(mut child) = self.child.lock() {
+            match child.try_wait() {
+                Ok(Some(status)) => Some(status.exit_code() as i32),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
     /// Close the PTY session.
     ///
     /// Kills the child process (if still running), drops the writer to send
