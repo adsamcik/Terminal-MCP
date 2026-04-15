@@ -43,7 +43,7 @@ No dedicated lint or typecheck commands are defined in `Cargo.toml:1-34`.
 | Symptom | Check |
 | --- | --- |
 | New Windows sessions start but never emit output. | Confirm the ConPTY handshake path in `src\terminal\pty_driver.rs:133-143` is still intact; the code explicitly writes a cursor/device-response sequence before normal output begins. |
-| `get_session_info` says shell integration is unavailable. | This is current behavior, not necessarily a broken environment: `src\server.rs:511-520` hardcodes `"unavailable"` even though `src\shell_integration.rs` exists. |
-| `read_output` reports `exit_code = 0` for an exited process. | That value is synthetic; `src\tools\observation.rs:304-310` documents that exact exit codes are not available from that path. |
-| Idle sessions are not auto-cleaned. | Cleanup logic exists in `src\session\manager.rs:112-147`, but bootstrap only shows server construction and stdio serving in `src\server.rs:600-609`; verify lifecycle wiring before relying on README feature text. |
+| `get_session_info` says shell integration is unavailable. | That is now a live status, not a hardcoded placeholder. Check whether the shell emitted OSC 133/633 markers or whether injected shell integration is expected in that environment (`src\shell_integration.rs`, `src\session\session.rs`, `src\server.rs:511-520`). |
+| `read_output` returns `exit_code = null` for an exited process. | That means the reader never captured an exact exit code at EOF. Use `wait_for_exit` or `get_session_info` if you need an explicit code after process termination (`src\tools\observation.rs:304-310`, `src\session\session.rs`). |
+| Idle sessions are not auto-cleaned. | Cleanup logic exists in `src\session\manager.rs:112-147`, but bootstrap only shows server construction and stdio serving in `src\server.rs:600-609`; hosts must start cleanup explicitly if they want it. |
 | E2E tests are flaky on non-Windows platforms. | Current black-box tests are written around `cmd.exe` plus `sleep`-based settling (`tests\integration_test.rs:8-18`, `tests\e2e_input.rs:16-27`, `tests\e2e_observation.rs:14-35`). |

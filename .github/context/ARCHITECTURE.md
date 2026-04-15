@@ -92,5 +92,5 @@ src\main.rs -> src\server.rs
 ## Architecture notes to keep in mind
 
 - Windows ConPTY support depends on an explicit initial handshake written in `PtyDriver::spawn`; without it, session output may never start flowing (`src\terminal\pty_driver.rs:133-143`).
-- Shell integration is implemented as a module, but `get_session_info` currently hardcodes `"unavailable"` when building the response (`src\shell_integration.rs:78-256`, `src\server.rs:511-520`).
-- Idle-session cleanup logic exists in `SessionManager::start_cleanup_task`, but bootstrap currently only constructs the server and starts stdio serving; verify wiring before relying on README auto-cleanup claims (`src\session\manager.rs:112-147`, `src\server.rs:600-609`, `README.md:19`).
+- Shell integration is tracked in session state and surfaced through `get_session_info` as `"detecting"`, `"active"`, `"injected"`, or `"unavailable"` (`src\shell_integration.rs:78-256`, `src\session\session.rs`, `src\server.rs:511-520`).
+- Idle-session cleanup logic exists in `SessionManager::start_cleanup_task`, but bootstrap still only constructs the server and starts stdio serving; cleanup remains host-controlled rather than auto-started at server startup (`src\session\manager.rs:112-147`, `src\server.rs:600-609`, `README.md:19`).

@@ -20,7 +20,7 @@ context-init:file: PATTERNS
 | Internal imports | Internal modules generally import siblings through `crate::...` paths. | `src\tools\lifecycle.rs:4-5`, `src\tools\input.rs:4-5`, `src\tools\automation.rs:13`, `src\tools\observation.rs:14-15` | Follow |
 | Testing layout | Keep fast unit tests next to implementation, and use `tests\*.rs` for black-box / end-to-end flows. | `src\tools\automation.rs:207-228`, `src\scrollback.rs:146-220`, `tests\integration_test.rs:1-80`, `tests\e2e_input.rs:1-80`, `tests\e2e_observation.rs:1-60` | Follow |
 | Platform assumptions | Current end-to-end coverage is Windows-first and often uses `cmd.exe` plus sleep-based settling. | `tests\integration_test.rs:8-18`, `tests\e2e_input.rs:16-27`, `tests\e2e_observation.rs:14-35` | Follow |
-| Shell integration maturity | Shell integration and error-detection modules exist, but the server currently reports shell integration as unavailable. Treat this area as incomplete. | `src\shell_integration.rs:78-256`, `src\error_detection.rs:104-189`, `src\server.rs:511-520` | Evolving |
+| Shell integration maturity | Shell integration and error-detection modules exist, and session info now reports the live integration state. Treat availability as environment-dependent rather than globally wired. | `src\shell_integration.rs:78-256`, `src\error_detection.rs:104-189`, `src\session\session.rs`, `src\server.rs:511-520` | Evolving |
 
 ## Practical guidance
 
@@ -31,6 +31,6 @@ context-init:file: PATTERNS
 
 ## Things not to assume
 
-- Do not assume shell integration is wired end to end just because `src\shell_integration.rs` exists.
-- Do not assume exact process exit codes are available from `read_output`; observation currently synthesizes `Some(0)` for exited sessions (`src\tools\observation.rs:304-310`).
+- Do not assume shell integration will be active for every shell just because `src\shell_integration.rs` exists; rely on the reported live state.
+- Do not assume exact process exit codes are always available from `read_output`; observation now returns `null` when EOF did not yield a concrete code (`src\tools\observation.rs:304-310`).
 - Do not assume README feature claims always reflect current wiring; verify against server/session bootstrap code when changing lifecycle behavior.

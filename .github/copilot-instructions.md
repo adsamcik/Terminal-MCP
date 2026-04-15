@@ -56,10 +56,10 @@ Rust MCP stdio server for PTY-backed terminal session management. Keep this file
 ## Gotchas
 
 - Windows ConPTY requires the initial cursor/DSR handshake injected in `src\terminal\pty_driver.rs`; avoid removing it.
-- README session creation examples use ISO timestamps, but `SessionInfo` currently reports relative strings like `"123s ago"`.
-- `read_output` reports `exit_code = Some(0)` when a process is no longer alive even though the exact exit code is unavailable there.
-- README advertises auto-cleanup and `SessionManager` implements it, but the model did not find a startup call to `start_cleanup_task`.
-- Shell integration exists as a module, but server introspection currently hardcodes `shell_integration` as `"unavailable"`.
+- `SessionInfo.created_at` is now reported as an RFC 3339 timestamp string, matching the README examples.
+- `read_output` returns `exit_code = null` when the exact exit code was never observed at EOF.
+- Idle cleanup support exists in `SessionManager`, but server startup does not begin cleanup automatically; keep docs explicit that hosts must opt in.
+- Shell integration state is reported live as `"detecting"`, `"active"`, `"injected"`, or `"unavailable"`.
 - Most integration/E2E tests are Windows-centric, `cmd.exe`-oriented, and use sleep-based settling.
 
 ## Targeted path rules

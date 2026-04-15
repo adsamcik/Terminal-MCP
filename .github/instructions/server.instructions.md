@@ -12,5 +12,5 @@ context-init:source: project-model.json
 
 - Keep this file focused on MCP schema, parameter decoding, tool routing, and stdio service startup.
 - Delegate non-routing behavior to `src/tools/*.rs` or `SessionManager` methods; `server.rs` already routes requests into those layers.
-- Preserve current introspection behavior unless intentionally wiring the existing support modules; `get_session_info` still reports `shell_integration` as `"unavailable"`.
+- Keep `get_session_info` wired to live session metadata, including the current shell-integration state string.
 - See `.github\context\ARCHITECTURE.md` for broader flow details.

@@ -13,4 +13,4 @@ context-init:source: project-model.json
 - Keep registry concerns in `manager.rs` and per-session PTY/VT/log state in `session.rs`.
 - Follow the existing shared-state pattern: `Arc` plus mutex-protected fields for PTY handles, VT state, output logs, read cursor, scrollback, and activity tracking.
 - Preserve close/drop semantics that cancel the reader task and kill the child process on shutdown.
-- If touching cleanup behavior, re-check the documented gap between README auto-cleanup claims and missing startup wiring.
+- If touching cleanup behavior, keep README and context docs aligned with the current host-controlled cleanup wiring; the task exists, but server startup does not begin it automatically.
