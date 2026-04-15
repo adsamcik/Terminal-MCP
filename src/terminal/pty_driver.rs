@@ -235,11 +235,8 @@ impl PtyDriver {
     /// Kills the child process (if still running), drops the writer to send
     /// EOF, and waits for the child to exit. Returns the exit status.
     pub async fn close(self) -> Result<Option<portable_pty::ExitStatus>> {
-        // Drop the writer to signal EOF to the child
-        drop(self.writer);
-
-        let child = self.child;
-        let killer = self.killer;
+        let child = Arc::clone(&self.child);
+        let killer = Arc::clone(&self.killer);
 
         let status = tokio::task::spawn_blocking(move || -> Result<Option<portable_pty::ExitStatus>> {
             let mut child_guard = child

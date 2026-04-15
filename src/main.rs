@@ -1,9 +1,9 @@
 use anyhow::Result;
 
+mod ansi;
 mod error_detection;
 mod keys;
 mod logging;
-mod output;
 mod screenshot;
 mod scrollback;
 mod server;

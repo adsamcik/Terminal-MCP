@@ -140,7 +140,7 @@ pub struct SessionInfoResponse {
     pub idle_duration_ms: u64,
     pub modes: TerminalModes,
     pub capabilities: SessionCapabilities,
-    /// `"active"`, `"injected"`, or `"unavailable"`.
+    /// `"detecting"`, `"active"`, `"injected"`, or `"unavailable"`.
     pub shell_integration: String,
 }
 

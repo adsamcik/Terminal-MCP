@@ -15,6 +15,7 @@ pub const MAX_SCROLLBACK_LINES: usize = 10_000;
 pub async fn handle_create_session(
     manager: &SessionManager,
     params: &CreateSessionParams,
+    owner_key: Option<String>,
 ) -> Result<serde_json::Value> {
     let config = SessionConfig {
         command: params.command.clone(),
@@ -25,7 +26,7 @@ pub async fn handle_create_session(
         cols: params.cols.unwrap_or(80).clamp(1, MAX_COLS),
         scrollback: (params.scrollback.unwrap_or(1000) as usize).min(MAX_SCROLLBACK_LINES),
     };
-    let info = manager.create_session_async(config).await?;
+    let info = manager.create_session_async_for_owner(config, owner_key).await?;
     Ok(serde_json::to_value(info)?)
 }
 
@@ -33,7 +34,9 @@ pub async fn handle_create_session(
 pub async fn handle_close_session(
     manager: &SessionManager,
     session_id: &str,
+    owner_key: Option<&str>,
 ) -> Result<serde_json::Value> {
+    manager.get_session_visible(session_id, owner_key)?;
     manager.close_session(session_id).await?;
     Ok(json!({ "session_id": session_id, "status": "closed" }))
 }
@@ -41,8 +44,9 @@ pub async fn handle_close_session(
 /// List metadata for every active session.
 pub async fn handle_list_sessions(
     manager: &SessionManager,
+    owner_key: Option<&str>,
 ) -> Result<serde_json::Value> {
-    let sessions = manager.list_sessions().await;
+    let sessions = manager.list_sessions_visible(owner_key).await;
     Ok(json!({ "sessions": sessions, "count": sessions.len() }))
 }
 

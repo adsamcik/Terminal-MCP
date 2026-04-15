@@ -1,10 +1,17 @@
+/// Structured tracing helpers for session and tool instrumentation.
+///
+/// These spans are available for use in tool handlers and session lifecycle
+/// but are not yet wired into the codebase.
+
 use tracing::Span;
 
+#[allow(dead_code)]
 /// Create a tracing span for a session lifecycle.
 pub fn session_span(session_id: &str) -> Span {
     tracing::info_span!("session", id = session_id)
 }
 
+#[allow(dead_code)]
 /// Create a tracing span for a tool call.
 pub fn tool_span(tool_name: &str, session_id: Option<&str>) -> Span {
     if let Some(sid) = session_id {

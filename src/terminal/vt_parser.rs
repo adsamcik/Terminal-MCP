@@ -118,6 +118,11 @@ impl VtParser {
         self.parser.process(bytes);
     }
 
+    /// Resize the virtual screen to new dimensions.
+    pub fn set_size(&mut self, rows: u16, cols: u16) {
+        self.parser.screen_mut().set_size(rows, cols);
+    }
+
     /// Direct access to the underlying `vt100::Screen`.
     pub fn screen(&self) -> &vt100::Screen {
         self.parser.screen()

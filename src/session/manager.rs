@@ -15,24 +15,33 @@ pub const MAX_SESSIONS: usize = 50;
 /// All public methods are `&self` — interior mutability is provided by
 /// `DashMap` and per-session `tokio::sync::Mutex` fields.
 pub struct SessionManager {
-    sessions: DashMap<SessionId, Arc<Session>>,
+    sessions: Arc<DashMap<SessionId, Arc<Session>>>,
 }
 
 impl SessionManager {
     pub fn new() -> Self {
         Self {
-            sessions: DashMap::new(),
+            sessions: Arc::new(DashMap::new()),
         }
     }
 
     /// Create a new terminal session, returning its metadata.
     pub fn create_session(&self, config: SessionConfig) -> Result<SessionInfo> {
+        self.create_session_for_owner(config, None)
+    }
+
+    /// Create a new terminal session associated with the given owner key.
+    pub fn create_session_for_owner(
+        &self,
+        config: SessionConfig,
+        owner_key: Option<String>,
+    ) -> Result<SessionInfo> {
         if self.sessions.len() >= MAX_SESSIONS {
             bail!("Maximum session limit ({MAX_SESSIONS}) reached");
         }
         let id = generate_id();
         let session =
-            Session::new(id.clone(), config).context("Failed to create session")?;
+            Session::new(id.clone(), config, owner_key).context("Failed to create session")?;
         let info = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(session.info())
         });
@@ -42,12 +51,21 @@ impl SessionManager {
 
     /// Create a new terminal session (async version).
     pub async fn create_session_async(&self, config: SessionConfig) -> Result<SessionInfo> {
+        self.create_session_async_for_owner(config, None).await
+    }
+
+    /// Create a new terminal session (async version) associated with the given owner key.
+    pub async fn create_session_async_for_owner(
+        &self,
+        config: SessionConfig,
+        owner_key: Option<String>,
+    ) -> Result<SessionInfo> {
         if self.sessions.len() >= MAX_SESSIONS {
             bail!("Maximum session limit ({MAX_SESSIONS}) reached");
         }
         let id = generate_id();
         let session =
-            Session::new(id.clone(), config).context("Failed to create session")?;
+            Session::new(id.clone(), config, owner_key).context("Failed to create session")?;
         let info = session.info().await;
         self.sessions.insert(id, Arc::new(session));
         Ok(info)
@@ -78,10 +96,19 @@ impl SessionManager {
 
     /// List metadata for every active session.
     pub async fn list_sessions(&self) -> Vec<SessionInfo> {
+        self.list_sessions_visible(None).await
+    }
+
+    /// List metadata for sessions visible to the given owner key.
+    pub async fn list_sessions_visible(&self, owner_key: Option<&str>) -> Vec<SessionInfo> {
         let mut infos = Vec::with_capacity(self.sessions.len());
         // Collect Arcs first to avoid holding DashMap shard locks across awaits.
-        let sessions: Vec<Arc<Session>> =
-            self.sessions.iter().map(|r| Arc::clone(r.value())).collect();
+        let sessions: Vec<Arc<Session>> = self
+            .sessions
+            .iter()
+            .filter(|entry| entry.value().is_visible_to(owner_key))
+            .map(|r| Arc::clone(r.value()))
+            .collect();
         for session in sessions {
             infos.push(session.info().await);
         }
@@ -90,10 +117,31 @@ impl SessionManager {
 
     /// Get a reference-counted handle to a session.
     pub fn get_session(&self, id: &str) -> Result<Arc<Session>> {
-        self.sessions
+        self.get_session_visible(id, None)
+    }
+
+    /// Get a reference-counted handle to a session if it is visible to the owner key.
+    pub fn get_session_visible(&self, id: &str, owner_key: Option<&str>) -> Result<Arc<Session>> {
+        let session = self
+            .sessions
             .get(id)
             .map(|r| Arc::clone(r.value()))
-            .context(format!("Session not found: {id}"))
+            .context(format!("Session not found: {id}"))?;
+
+        if !session.is_visible_to(owner_key) {
+            bail!("Session not found: {id}");
+        }
+
+        Ok(session)
+    }
+
+    /// Execute a closure with a visible session reference, returning its result.
+    pub fn with_session_visible<F, R>(&self, id: &str, owner_key: Option<&str>, f: F) -> Result<R>
+    where
+        F: FnOnce(&Session) -> R,
+    {
+        let session = self.get_session_visible(id, owner_key)?;
+        Ok(f(session.as_ref()))
     }
 
     /// Execute a closure with a session reference, returning its result.
@@ -101,11 +149,7 @@ impl SessionManager {
     where
         F: FnOnce(&Session) -> R,
     {
-        let entry = self
-            .sessions
-            .get(id)
-            .context(format!("Session not found: {id}"))?;
-        Ok(f(entry.value()))
+        self.with_session_visible(id, None, f)
     }
 
     /// Number of active sessions.
@@ -136,11 +180,15 @@ impl SessionManager {
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(poll_interval).await;
+                let snapshots: Vec<(SessionId, Arc<Session>)> = sessions
+                    .iter()
+                    .map(|entry| (entry.key().clone(), Arc::clone(entry.value())))
+                    .collect();
                 let mut to_remove = Vec::new();
 
-                for entry in sessions.iter() {
-                    if entry.value().is_idle(idle_timeout).await {
-                        to_remove.push(entry.key().clone());
+                for (id, session) in snapshots {
+                    if session.is_idle(idle_timeout).await {
+                        to_remove.push(id);
                     }
                 }
 
@@ -153,8 +201,10 @@ impl SessionManager {
                             }
                             Err(arc) => {
                                 arc.cancel.cancel();
-                                let pty = arc.pty.lock().await;
-                                let _ = pty.kill();
+                                {
+                                    let pty = arc.pty.lock().await;
+                                    pty.kill();
+                                }
                                 tracing::warn!(
                                     session_id = %id,
                                     "Session had active references during cleanup; forcing shutdown"

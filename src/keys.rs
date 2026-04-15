@@ -1,9 +1,18 @@
+const MAX_KEY_DEPTH: usize = 3;
+
 /// Maps named key strings to VT escape sequences.
 /// e.g., "Up" → "\x1b[A", "Ctrl+C" → "\x03"
 ///
 /// Key names are case-insensitive ("ctrl+c" == "Ctrl+C").
 /// When `application_cursor` is true, arrow keys use SS3 (`\x1bO`) instead of CSI (`\x1b[`).
 pub fn key_to_bytes(key: &str, application_cursor: bool) -> Option<Vec<u8>> {
+    key_to_bytes_inner(key, application_cursor, 0)
+}
+
+fn key_to_bytes_inner(key: &str, application_cursor: bool, depth: usize) -> Option<Vec<u8>> {
+    if depth > MAX_KEY_DEPTH {
+        return None;
+    }
     // Normalize to consistent casing for matching
     let normalized = normalize_key(key);
     let k = normalized.as_str();
@@ -61,7 +70,7 @@ pub fn key_to_bytes(key: &str, application_cursor: bool) -> Option<Vec<u8>> {
         // -- Alt+<key> (sends ESC prefix before the key bytes) --
         _ if k.starts_with("Alt+") => {
             let rest = &k[4..];
-            let bytes = key_to_bytes(rest, application_cursor)?;
+            let bytes = key_to_bytes_inner(rest, application_cursor, depth + 1)?;
             let mut result = vec![0x1b];
             result.extend(bytes);
             Some(result)
@@ -80,6 +89,13 @@ pub fn key_to_bytes(key: &str, application_cursor: bool) -> Option<Vec<u8>> {
 /// Normalize a key name to title-case for matching.
 /// "ctrl+c" → "Ctrl+c", "ENTER" → "Enter", "shift+tab" → "Shift+Tab", "f1" → "F1"
 fn normalize_key(key: &str) -> String {
+    normalize_key_inner(key, 0)
+}
+
+fn normalize_key_inner(key: &str, depth: usize) -> String {
+    if depth > MAX_KEY_DEPTH {
+        return key.to_string();
+    }
     let trimmed = key.trim();
     // Single character keys — preserve case
     if trimmed.chars().count() == 1 {
@@ -116,7 +132,7 @@ fn normalize_key(key: &str) -> String {
         "f12" => "F12".to_string(),
         _ if lower.starts_with("shift+") => {
             let rest = &key[6..];
-            format!("Shift+{}", normalize_key(rest))
+            format!("Shift+{}", normalize_key_inner(rest, depth + 1))
         }
         _ if lower.starts_with("ctrl+") => {
             let rest = &key[5..];
@@ -124,7 +140,7 @@ fn normalize_key(key: &str) -> String {
         }
         _ if lower.starts_with("alt+") => {
             let rest = &key[4..];
-            format!("Alt+{}", normalize_key(rest))
+            format!("Alt+{}", normalize_key_inner(rest, depth + 1))
         }
         _ => key.to_string(),
     }

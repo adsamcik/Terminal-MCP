@@ -18,7 +18,7 @@ use rmcp::{
 };
 use serde::Deserialize;
 
-use crate::session::SessionManager;
+use crate::session::{Session, SessionManager};
 use crate::tools::automation;
 use crate::tools::{introspection, observation};
 
@@ -65,7 +65,7 @@ pub struct SendTextParams {
     pub text: String,
     #[schemars(description = "If true, press Enter after typing the text (default: false)")]
     pub press_enter: Option<bool>,
-    #[schemars(description = "Delay in milliseconds between each character. Useful for testing timing-sensitive input like double-tap sequences. If omitted, all characters are sent at once.")]
+    #[schemars(description = "Additional delay in milliseconds between typed characters. If omitted, send_text applies its built-in pacing for normal text entry and only needs this field for slower timing-sensitive sequences.")]
     pub delay_between_ms: Option<u64>,
 }
 
@@ -120,7 +120,7 @@ pub struct GetScreenParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
     #[schemars(
-        description = "If true, include color/attribute annotations per span (default: false)"
+        description = "If true, include color spans plus compact per-glyph color/attribute indices (default: false)"
     )]
     pub include_colors: Option<bool>,
     #[schemars(description = "If true, mark the cursor position in the output (default: true)")]
@@ -259,6 +259,36 @@ impl TerminalMcpServer {
         }
     }
 
+    fn request_owner_key(context: &RequestContext<RoleServer>) -> Option<String> {
+        if let Some(parts) = context.extensions.get::<http::request::Parts>() {
+            if let Some(session_id) = parts
+                .headers
+                .get("mcp-session-id")
+                .and_then(|value| value.to_str().ok())
+            {
+                return Some(format!("http-session:{session_id}"));
+            }
+        }
+
+        context.peer.peer_info().map(|client_info| {
+            format!(
+                "client:{}@{}",
+                client_info.client_info.name, client_info.client_info.version
+            )
+        })
+    }
+
+    fn visible_session(
+        &self,
+        session_id: &str,
+        context: &RequestContext<RoleServer>,
+    ) -> Result<Arc<Session>, McpError> {
+        let owner_key = Self::request_owner_key(context);
+        self.session_manager
+            .get_session_visible(session_id, owner_key.as_deref())
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))
+    }
+
     // -- Tier 1: Essential ------------------------------------------------
 
     /// Create a new interactive terminal session with a PTY.
@@ -266,9 +296,17 @@ impl TerminalMcpServer {
     #[tool(description = "Create a new interactive terminal session with a PTY. Spawns a shell or specified command.")]
     async fn create_session(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<CreateSessionParams>,
     ) -> Result<CallToolResult, McpError> {
-        match crate::tools::lifecycle::handle_create_session(&self.session_manager, &params.0).await {
+        let owner_key = Self::request_owner_key(&context);
+        match crate::tools::lifecycle::handle_create_session(
+            &self.session_manager,
+            &params.0,
+            owner_key,
+        )
+        .await
+        {
             Ok(value) => {
                 let json = serde_json::to_string_pretty(&value)
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
@@ -282,9 +320,17 @@ impl TerminalMcpServer {
     #[tool(description = "Close a terminal session by ID, terminating the PTY process.")]
     async fn close_session(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<CloseSessionParams>,
     ) -> Result<CallToolResult, McpError> {
-        match crate::tools::lifecycle::handle_close_session(&self.session_manager, &params.0.session_id).await {
+        let owner_key = Self::request_owner_key(&context);
+        match crate::tools::lifecycle::handle_close_session(
+            &self.session_manager,
+            &params.0.session_id,
+            owner_key.as_deref(),
+        )
+        .await
+        {
             Ok(value) => {
                 let json = serde_json::to_string_pretty(&value)
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
@@ -298,9 +344,16 @@ impl TerminalMcpServer {
     #[tool(description = "List all active terminal sessions with their status.")]
     async fn list_sessions(
         &self,
+        context: RequestContext<RoleServer>,
         _params: Parameters<ListSessionsParams>,
     ) -> Result<CallToolResult, McpError> {
-        match crate::tools::lifecycle::handle_list_sessions(&self.session_manager).await {
+        let owner_key = Self::request_owner_key(&context);
+        match crate::tools::lifecycle::handle_list_sessions(
+            &self.session_manager,
+            owner_key.as_deref(),
+        )
+        .await
+        {
             Ok(value) => {
                 let json = serde_json::to_string_pretty(&value)
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
@@ -315,11 +368,10 @@ impl TerminalMcpServer {
     #[tool(description = "Type text into a terminal session. Characters are sent as-is. For control keys, navigation, or function keys, use send_keys instead. Optionally press Enter after the text.")]
     async fn send_text(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<SendTextParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session = self.session_manager.get_session(&params.0.session_id).map_err(|e| {
-            McpError::invalid_params(format!("Session not found: {e}"), None)
-        })?;
+        let session = self.visible_session(&params.0.session_id, &context)?;
         let press_enter = params.0.press_enter.unwrap_or(false);
         match crate::tools::input::handle_send_text(&session, &params.0.text, press_enter, params.0.delay_between_ms).await {
             Ok(value) => {
@@ -336,11 +388,10 @@ impl TerminalMcpServer {
     #[tool(description = "Send named keystrokes to a terminal session. Use for control keys (Ctrl+C), navigation (Up/Down/Tab), and function keys (F1). For typing text, use send_text instead.")]
     async fn send_keys(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<SendKeysParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session = self.session_manager.get_session(&params.0.session_id).map_err(|e| {
-            McpError::invalid_params(format!("Session not found: {e}"), None)
-        })?;
+        let session = self.visible_session(&params.0.session_id, &context)?;
         match crate::tools::input::handle_send_keys(&session, &params.0.keys).await {
             Ok(value) => {
                 let json = serde_json::to_string_pretty(&value)
@@ -356,13 +407,11 @@ impl TerminalMcpServer {
     #[tool(description = "Send input to a terminal session and wait for expected output. This is the primary tool for command execution — type a command, wait for it to complete, and get the output. Combines send_text + wait_for + read_output into one efficient call.")]
     async fn send_and_wait(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<SendAndWaitParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let result = automation::handle_send_and_wait(
             &session,
@@ -383,12 +432,10 @@ impl TerminalMcpServer {
     #[tool(description = "Read new output from a terminal session since the last read. Returns raw text output (ANSI codes stripped). Best for following command output, logs, and streaming results. For TUI/full-screen apps, use get_screen instead.")]
     async fn read_output(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<ReadOutputParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session = self
-            .session_manager
-            .get_session(&params.0.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&params.0.session_id, &context)?;
 
         let resp = crate::tools::observation::handle_read_output(
             &session,
@@ -409,12 +456,10 @@ impl TerminalMcpServer {
     #[tool(description = "Get the current terminal screen contents as a text grid. Returns the full visible buffer (e.g., 80x24). Best for TUI apps, editors, debuggers, and any full-screen application. For streaming command output, use read_output instead.")]
     async fn get_screen(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<GetScreenParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session = self
-            .session_manager
-            .get_session(&params.0.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&params.0.session_id, &context)?;
 
         let include_cursor = params.0.include_cursor.unwrap_or(true);
         let include_colors = params.0.include_colors.unwrap_or(false);
@@ -439,13 +484,11 @@ impl TerminalMcpServer {
     #[tool(description = "Capture a PNG screenshot of the terminal screen. Renders with a monospace font preserving colors, bold, italic, underline. Returns an MCP image content block.")]
     async fn screenshot(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<ScreenshotParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let theme = p.theme.as_deref().unwrap_or("dark");
         let font_size = p.font_size.unwrap_or(14);
@@ -490,13 +533,11 @@ impl TerminalMcpServer {
     #[tool(description = "Read scrollback buffer (content that has scrolled above the visible screen). Useful for retrieving earlier command output or error messages.")]
     async fn get_scrollback(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<GetScrollbackParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let result = observation::handle_get_scrollback(
             &session,
@@ -514,13 +555,11 @@ impl TerminalMcpServer {
     #[tool(description = "Wait for a pattern to appear in terminal output, or for a target number of new output lines. Does not send any input. Use for monitoring long-running processes, waiting for prompts, or detecting errors.")]
     async fn wait_for(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<WaitForParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let result = automation::handle_wait_for(
             &session,
@@ -540,13 +579,11 @@ impl TerminalMcpServer {
     #[tool(description = "Wait for the terminal to become idle (no new output for a specified duration). Optionally watch for the visible screen to stop changing instead, which is more reliable for some TUI apps. Use when you don't know the exact completion pattern.")]
     async fn wait_for_idle(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<WaitForIdleParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let result = automation::handle_wait_for_idle(
             &session,
@@ -564,13 +601,11 @@ impl TerminalMcpServer {
     #[tool(description = "Wait for the child process in a terminal session to exit. Returns the exit code. Use when you need to verify a process completed successfully.")]
     async fn wait_for_exit(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<WaitForExitParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let result = automation::handle_wait_for_exit(
             &session,
@@ -586,19 +621,16 @@ impl TerminalMcpServer {
     #[tool(description = "Get detailed session metadata including PID, command, terminal size, status, and capabilities.")]
     async fn get_session_info(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<GetSessionInfoParams>,
     ) -> Result<CallToolResult, McpError> {
-        let session = self
-            .session_manager
-            .get_session(&params.0.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&params.0.session_id, &context)?;
 
         let info = session.info().await;
         let idle_ms = session.idle_duration_ms().await;
         let args = session.config.args.clone();
         let cwd = session.config.cwd.as_deref();
-        let shell_integration_status = session.shell_integration_status_str().await;
-
+        let shell_integration = session.shell_integration_status_str().await;
         let resp = session
             .with_vt(|vt| {
                 introspection::build_session_info(
@@ -607,7 +639,7 @@ impl TerminalMcpServer {
                     &args,
                     cwd,
                     idle_ms,
-                    &shell_integration_status,
+                    &shell_integration,
                 )
             })
             .await;
@@ -624,13 +656,11 @@ impl TerminalMcpServer {
     #[tool(description = "Search scrollback history using a regex pattern. Returns matching lines with surrounding context.")]
     async fn search_output(
         &self,
+        context: RequestContext<RoleServer>,
         params: Parameters<SearchOutputParams>,
     ) -> Result<CallToolResult, McpError> {
         let p = &params.0;
-        let session = self
-            .session_manager
-            .get_session(&p.session_id)
-            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let session = self.visible_session(&p.session_id, &context)?;
 
         let context = p.context_lines.unwrap_or(2);
         let matches = session

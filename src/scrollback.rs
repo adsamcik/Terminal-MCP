@@ -7,8 +7,11 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use regex::Regex;
+use regex::RegexBuilder;
 use serde::Serialize;
+
+const MAX_PENDING_BYTES: usize = 1_048_576; // 1 MB
+const MAX_LINE_BYTES: usize = 1_048_576; // 1 MB
 
 /// A single line stored in the scrollback buffer.
 pub struct ScrollbackLine {
@@ -65,6 +68,12 @@ impl ScrollbackBuffer {
                 self.pending = part.to_string();
             }
         }
+
+        // Cap pending buffer to prevent unbounded growth
+        if self.pending.len() > MAX_PENDING_BYTES {
+            let flushed = std::mem::take(&mut self.pending);
+            self.push_line(flushed, Instant::now());
+        }
     }
 
     /// Get the last `n` lines (tail mode).
@@ -93,7 +102,10 @@ impl ScrollbackBuffer {
         pattern: &str,
         context_lines: usize,
     ) -> Result<Vec<SearchMatch>> {
-        let re = Regex::new(pattern).context("Invalid regex pattern")?;
+        let re = RegexBuilder::new(pattern)
+            .size_limit(1_000_000)
+            .build()
+            .context("Invalid regex pattern")?;
         let total = self.lines.len();
         let mut matches = Vec::new();
 
@@ -133,7 +145,14 @@ impl ScrollbackBuffer {
 
     // -- internal -----------------------------------------------------------
 
-    fn push_line(&mut self, text: String, timestamp: Instant) {
+    fn push_line(&mut self, mut text: String, timestamp: Instant) {
+        if text.len() > MAX_LINE_BYTES {
+            let mut end = MAX_LINE_BYTES;
+            while end > 0 && !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            text.truncate(end);
+        }
         if self.lines.len() >= self.max_lines {
             self.lines.pop_front();
         }

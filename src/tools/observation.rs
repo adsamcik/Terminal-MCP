@@ -8,16 +8,22 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use regex::Regex;
 use serde::Serialize;
 
+use crate::ansi::strip_ansi;
 use crate::session::Session;
-use crate::terminal::{Color, ColorSpan, VtParser};
+use crate::terminal::{CellInfo, Color, ColorSpan, VtParser};
+
+const MAX_TIMEOUT_MS: u64 = 300_000; // 5 minutes
 
 // ── Serde helpers ──────────────────────────────────────────────────
 
 fn is_false(v: &bool) -> bool {
     !v
+}
+
+fn is_zero(v: &usize) -> bool {
+    *v == 0
 }
 
 // ── Public response types ──────────────────────────────────────────
@@ -56,6 +62,33 @@ pub struct SerializedColorSpan {
     pub inverse: bool,
 }
 
+/// A compact, reusable style entry for per-glyph screen annotations.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct SerializedGlyphStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bg: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub bold: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub italic: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub underline: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub inverse: bool,
+}
+
+/// Per-glyph style indices aligned to the `screen` text grid.
+///
+/// Each row entry points into `palette`. When `include_cursor=true`, the
+/// synthetic `▏` cursor marker is encoded as `null` in `rows`.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct GlyphStyleGrid {
+    pub palette: Vec<SerializedGlyphStyle>,
+    pub rows: Vec<Vec<Option<u16>>>,
+}
+
 /// Full response payload for the `get_screen` tool.
 #[derive(Debug, Clone, Serialize)]
 pub struct GetScreenResponse {
@@ -79,6 +112,8 @@ pub struct GetScreenResponse {
     pub color_spans: Option<Vec<SerializedColorSpan>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub highlights: Option<Vec<SerializedColorSpan>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glyph_styles: Option<GlyphStyleGrid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub changed_rows: Option<Vec<u16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -152,6 +187,141 @@ fn serialize_span(span: &ColorSpan) -> SerializedColorSpan {
     }
 }
 
+fn serialize_style(
+    fg: &Color,
+    bg: &Color,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    inverse: bool,
+) -> SerializedGlyphStyle {
+    SerializedGlyphStyle {
+        fg: serialize_color(fg),
+        bg: serialize_color(bg),
+        bold,
+        italic,
+        underline,
+        inverse,
+    }
+}
+
+fn serialize_cell_style(cell: &CellInfo) -> SerializedGlyphStyle {
+    serialize_style(
+        &cell.fg,
+        &cell.bg,
+        cell.bold,
+        cell.italic,
+        cell.underline,
+        cell.inverse,
+    )
+}
+
+fn palette_index(
+    palette: &mut Vec<SerializedGlyphStyle>,
+    style: SerializedGlyphStyle,
+) -> Option<u16> {
+    if let Some(index) = palette.iter().position(|candidate| candidate == &style) {
+        return Some(index as u16);
+    }
+
+    let index = palette.len();
+    if index > u16::MAX as usize {
+        return None;
+    }
+
+    palette.push(style);
+    Some(index as u16)
+}
+
+fn build_glyph_styles(
+    vt: &VtParser,
+    include_cursor: bool,
+    region: Option<ScreenRegion>,
+) -> GlyphStyleGrid {
+    struct GlyphRowEntry {
+        style_index: Option<u16>,
+        is_trimmable_whitespace: bool,
+    }
+
+    let screen = vt.screen();
+    let (rows, cols) = screen.size();
+    let (cursor_row, cursor_col) = vt.cursor_position();
+
+    let bounds = region.unwrap_or(ScreenRegion {
+        top: 0,
+        left: 0,
+        bottom: rows.saturating_sub(1),
+        right: cols.saturating_sub(1),
+    });
+    let include_cursor = include_cursor && region.is_none();
+
+    let mut palette = vec![SerializedGlyphStyle::default()];
+    let mut style_rows = Vec::new();
+
+    for row in bounds.top..=bounds.bottom {
+        let mut row_entries = Vec::new();
+
+        for col in bounds.left..=bounds.right {
+            if include_cursor && row == cursor_row && col == cursor_col {
+                row_entries.push(GlyphRowEntry {
+                    style_index: None,
+                    is_trimmable_whitespace: false,
+                });
+            }
+
+            let Some(cell) = vt.screen_cell(row, col) else {
+                continue;
+            };
+
+            if cell.is_wide_continuation {
+                continue;
+            }
+
+            let rendered = if cell.contents.is_empty() {
+                " ".to_string()
+            } else {
+                cell.contents.clone()
+            };
+            let style_index = palette_index(&mut palette, serialize_cell_style(&cell)).unwrap_or(0);
+
+            row_entries.push(GlyphRowEntry {
+                style_index: Some(style_index),
+                is_trimmable_whitespace: rendered.chars().all(char::is_whitespace),
+            });
+        }
+
+        if include_cursor && row == cursor_row && cursor_col >= cols {
+            row_entries.push(GlyphRowEntry {
+                style_index: None,
+                is_trimmable_whitespace: false,
+            });
+        }
+
+        while row_entries
+            .last()
+            .is_some_and(|entry| entry.is_trimmable_whitespace)
+        {
+            row_entries.pop();
+        }
+
+        style_rows.push(
+            row_entries
+                .into_iter()
+                .map(|entry| entry.style_index)
+                .collect(),
+        );
+    }
+
+    while style_rows.last().is_some_and(|row: &Vec<Option<u16>>| row.is_empty()) {
+        style_rows.pop();
+    }
+
+    GlyphStyleGrid {
+        palette,
+        rows: style_rows,
+    }
+}
+
 // ── get_screen ─────────────────────────────────────────────────────
 
 /// On Windows, ConPTY handles DECSET 1049 internally and does not pass
@@ -175,7 +345,7 @@ fn conpty_alternate_screen_note() -> Option<String> {
 /// Build a [`GetScreenResponse`] from the current parser state.
 ///
 /// * `include_cursor` — insert a `▏` marker at the cursor position.
-/// * `include_colors` — attach color-span and highlight arrays.
+    /// * `include_colors` — attach color-span, highlight, and per-glyph style arrays.
 /// * `region` — if `Some`, read only a sub-rectangle of the screen.
 /// * `diff_mode` — if `true`, include only changed row indices and take a
 ///   snapshot for the next diff comparison.
@@ -198,17 +368,19 @@ pub fn get_screen(
     };
 
     // Color spans / highlights
-    let (color_spans, highlights) = if include_colors {
+    let (color_spans, highlights, glyph_styles) = if include_colors {
         let spans: Vec<SerializedColorSpan> =
             vt.color_spans().iter().map(serialize_span).collect();
         let hi: Vec<SerializedColorSpan> =
             vt.highlights().iter().map(serialize_span).collect();
+        let glyph_styles = build_glyph_styles(vt, include_cursor, region);
         (
             Some(spans),
             if hi.is_empty() { None } else { Some(hi) },
+            Some(glyph_styles),
         )
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     // Changed rows (diff mode)
@@ -246,30 +418,10 @@ pub fn get_screen(
         title: vt.terminal_title(),
         color_spans,
         highlights,
+        glyph_styles,
         changed_rows,
         changed_content,
     }
-}
-
-// ── ANSI stripping ─────────────────────────────────────────────────
-
-/// Strip ANSI escape sequences from raw terminal output so the agent
-/// receives clean, readable text.
-///
-/// Handles:
-/// - CSI sequences: `ESC [ <params> <final>`
-/// - OSC sequences: `ESC ] ... (ST | BEL)`
-/// - Two-byte escapes: `ESC <letter>`  (e.g. `ESC ( B`)
-fn strip_ansi(input: &str) -> String {
-    // Lazy-compiled regex covering CSI, OSC, and short ESC sequences.
-    let re = Regex::new(concat!(
-        r"\x1b\[[0-9;?]*[ -/]*[@-~]",   // CSI sequences
-        r"|\x1b\].*?(?:\x1b\\|\x07)",    // OSC sequences (terminated by ST or BEL)
-        r"|\x1b[()][A-Z0-9]",            // charset selection (e.g. ESC ( B)
-        r"|\x1b[A-Z@-_]",               // two-byte sequences (e.g. ESC M)
-    ))
-    .expect("ANSI regex is valid");
-    re.replace_all(input, "").into_owned()
 }
 
 // ── read_output ────────────────────────────────────────────────────
@@ -280,6 +432,8 @@ pub struct ReadOutputResponse {
     pub output: String,
     pub bytes_read: usize,
     pub has_more: bool,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub dropped_bytes: usize,
     pub is_idle: bool,
     pub idle_duration_ms: u64,
     pub cursor: CursorPosition,
@@ -296,22 +450,22 @@ pub async fn handle_read_output(
     timeout_ms: Option<u64>,
     max_bytes: Option<usize>,
 ) -> Result<ReadOutputResponse> {
-    let timeout = Duration::from_millis(timeout_ms.unwrap_or(5000));
-    let max = max_bytes.unwrap_or(16384);
+    let timeout = Duration::from_millis(timeout_ms.unwrap_or(5000).min(MAX_TIMEOUT_MS));
+    let max = max_bytes.unwrap_or(16384).clamp(1, 10_485_760);
     let poll_interval = Duration::from_millis(100);
 
     // Wait for output, polling periodically up to the timeout.
     let raw = {
-        let initial = session.read_new_output().await;
-        if !initial.is_empty() {
+        let initial = session.read_new_output_chunk().await;
+        if !initial.bytes.is_empty() || initial.dropped_bytes > 0 {
             initial
         } else {
             let deadline = tokio::time::Instant::now() + timeout;
-            let mut data = Vec::new();
+            let mut data = session.read_new_output_chunk().await;
             while tokio::time::Instant::now() < deadline {
                 tokio::time::sleep(poll_interval).await;
-                data = session.read_new_output().await;
-                if !data.is_empty() {
+                data = session.read_new_output_chunk().await;
+                if !data.bytes.is_empty() || data.dropped_bytes > 0 {
                     break;
                 }
             }
@@ -320,7 +474,7 @@ pub async fn handle_read_output(
     };
 
     // Interpret as (lossy) UTF-8 and strip ANSI escapes.
-    let text = String::from_utf8_lossy(&raw);
+    let text = String::from_utf8_lossy(&raw.bytes);
     let clean = strip_ansi(&text);
 
     // Truncate to max_bytes on a char boundary.
@@ -349,12 +503,13 @@ pub async fn handle_read_output(
         visible: true,
     };
 
-    let exit_code = session.exit_code().await;
+    let exit_code = session.cached_exit_code().await;
 
     Ok(ReadOutputResponse {
         output,
         bytes_read,
         has_more,
+        dropped_bytes: raw.dropped_bytes,
         is_idle,
         idle_duration_ms,
         cursor,
@@ -393,7 +548,7 @@ pub async fn handle_get_scrollback(
         }));
     }
 
-    let n = lines.unwrap_or(-100);
+    let n = lines.unwrap_or(-100).clamp(-50_000, 50_000);
     let total = session.scrollback_len().await;
 
     let result_lines = if n < 0 {
@@ -550,68 +705,6 @@ mod tests {
         assert!(content[0].previous.starts_with("original"));
     }
 
-    // ── Additional tests ──────────────────────────────────────
-
-    #[test]
-    fn strip_ansi_removes_csi_sequences() {
-        let input = "\x1b[31mred text\x1b[0m";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "red text");
-    }
-
-    #[test]
-    fn strip_ansi_removes_osc_sequences() {
-        let input = "\x1b]2;Window Title\x07normal text";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "normal text");
-    }
-
-    #[test]
-    fn strip_ansi_removes_osc_with_st_terminator() {
-        let input = "\x1b]0;title\x1b\\text here";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "text here");
-    }
-
-    #[test]
-    fn strip_ansi_preserves_plain_text() {
-        let input = "Hello, world! No escapes here.";
-        assert_eq!(strip_ansi(input), input);
-    }
-
-    #[test]
-    fn strip_ansi_removes_charset_selection() {
-        let input = "\x1b(Bnormal";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "normal");
-    }
-
-    #[test]
-    fn strip_ansi_removes_two_byte_sequences() {
-        // ESC M (reverse index)
-        let input = "\x1bMtext";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "text");
-    }
-
-    #[test]
-    fn strip_ansi_complex_mixed() {
-        let input = "\x1b[1;32mgreen bold\x1b[0m \x1b]2;title\x07\x1b[31mred\x1b[0m end";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "green bold red end");
-    }
-
-    #[test]
-    fn strip_ansi_empty_input() {
-        assert_eq!(strip_ansi(""), "");
-    }
-
-    #[test]
-    fn strip_ansi_cursor_movement() {
-        let input = "\x1b[2J\x1b[Hclear screen";
-        let clean = strip_ansi(input);
-        assert_eq!(clean, "clear screen");
-    }
 
     #[test]
     fn color_serialization_all_ansi_colors() {
@@ -706,6 +799,7 @@ mod tests {
         let resp = get_screen(&mut vt, false, false, None, false);
         assert!(resp.color_spans.is_none());
         assert!(resp.highlights.is_none());
+        assert!(resp.glyph_styles.is_none());
     }
 
     #[test]
@@ -754,5 +848,38 @@ mod tests {
         let resp = get_screen(&mut vt, false, true, None, false);
         // highlights should be None when no inverse spans exist
         assert!(resp.highlights.is_none());
+    }
+
+    #[test]
+    fn get_screen_glyph_styles_align_with_screen_text() {
+        let mut vt = make_parser(5, 20);
+        vt.process(b"\x1b[31mRED\x1b[0m X");
+        let resp = get_screen(&mut vt, false, true, None, false);
+        let glyph_styles = resp.glyph_styles.expect("should have glyph styles");
+
+        assert_eq!(resp.screen, "RED X");
+        assert_eq!(glyph_styles.rows.len(), 1);
+        assert_eq!(glyph_styles.rows[0].len(), 5);
+
+        let red_index = glyph_styles.rows[0][0].expect("first glyph should have a style");
+        assert_eq!(glyph_styles.rows[0][1], Some(red_index));
+        assert_eq!(glyph_styles.rows[0][2], Some(red_index));
+        assert_eq!(
+            glyph_styles.palette[red_index as usize].fg,
+            Some("red".to_string())
+        );
+        assert_eq!(glyph_styles.rows[0][3], Some(0));
+        assert_eq!(glyph_styles.rows[0][4], Some(0));
+    }
+
+    #[test]
+    fn get_screen_glyph_styles_mark_cursor_with_null() {
+        let mut vt = make_parser(5, 20);
+        vt.process(b"abc");
+        let resp = get_screen(&mut vt, true, true, None, false);
+        let glyph_styles = resp.glyph_styles.expect("should have glyph styles");
+
+        assert_eq!(resp.screen, "abc▏");
+        assert_eq!(glyph_styles.rows, vec![vec![Some(0), Some(0), Some(0), None]]);
     }
 }

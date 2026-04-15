@@ -4,23 +4,37 @@ use serde_json::json;
 use crate::keys::key_to_bytes;
 use crate::session::Session;
 
+const MAX_SEND_TEXT_BYTES: usize = 1_048_576; // 1 MB
+const MAX_KEYS_COUNT: usize = 1_000;
+const DEFAULT_TYPED_CHARACTER_DELAY_MS: u64 = 5;
+const DEFAULT_TYPED_DELAY_LIMIT_BYTES: usize = 4 * 1024;
+
 /// Write text to a session's PTY stdin, optionally pressing Enter afterwards.
-/// If `delay_between_ms` is set, characters are sent one at a time with the
-/// specified delay between them (useful for timing-sensitive TUI input).
+/// Small text-entry sends are paced character-by-character so raw-input TUIs
+/// receive typed input instead of one pasted chunk. `delay_between_ms` can slow
+/// the cadence further for timing-sensitive flows.
 pub async fn handle_send_text(
     session: &Session,
     text: &str,
     press_enter: bool,
     delay_between_ms: Option<u64>,
 ) -> Result<serde_json::Value> {
-    if let Some(delay_ms) = delay_between_ms {
-        let delay = std::time::Duration::from_millis(delay_ms);
-        for ch in text.chars() {
-            let mut buf = [0u8; 4];
-            let bytes = ch.encode_utf8(&mut buf);
-            session.write_bytes(bytes.as_bytes()).await?;
-            tokio::time::sleep(delay).await;
-        }
+    if text.len() > MAX_SEND_TEXT_BYTES {
+        anyhow::bail!("send_text input exceeds maximum size of {} bytes", MAX_SEND_TEXT_BYTES);
+    }
+
+    let default_typed_delay = delay_between_ms
+        .is_none()
+        .then_some(text.len())
+        .filter(|len| *len > 0 && *len <= DEFAULT_TYPED_DELAY_LIMIT_BYTES)
+        .map(|_| DEFAULT_TYPED_CHARACTER_DELAY_MS);
+
+    let delay_between = delay_between_ms
+        .or(default_typed_delay)
+        .map(std::time::Duration::from_millis);
+
+    if delay_between.is_some() {
+        session.write_text(text, delay_between).await?;
     } else {
         session.write_bytes(text.as_bytes()).await?;
     }
@@ -42,6 +56,10 @@ pub async fn handle_send_keys(
     session: &Session,
     keys: &[String],
 ) -> Result<serde_json::Value> {
+    if keys.len() > MAX_KEYS_COUNT {
+        anyhow::bail!("send_keys exceeds maximum of {} keys per call", MAX_KEYS_COUNT);
+    }
+
     let app_cursor = session.application_cursor().await;
     let mut total = 0usize;
     for key in keys {

@@ -16,7 +16,7 @@ pub struct ErrorMatch {
     pub line_number: usize,
     /// The full line containing the match.
     pub line: String,
-    /// Index of the pattern that matched (maps to [`PATTERN_NAMES`]).
+    /// Index of the pattern that matched (maps to [`PATTERN_DEFS`]).
     pub pattern_index: usize,
     /// Human-readable name of the matched pattern.
     pub pattern_name: String,
@@ -24,81 +24,54 @@ pub struct ErrorMatch {
 
 // ── Pattern catalogue ──────────────────────────────────────────────
 
-/// Human-readable labels for each pattern in the `RegexSet`, in order.
-const PATTERN_NAMES: &[&str] = &[
-    "gcc/clang error",
-    "gcc/clang warning",
-    "rustc error",
-    "rustc warning",
-    "typescript error",
-    "dotnet error",
-    "dotnet build failed",
-    "npm error",
-    "python traceback",
-    "python error line",
-    "java exception",
-    "java stack frame",
-    "go error",
-    "generic error:",
-    "generic FAILED",
-    "generic fatal:",
-    "generic FATAL",
-    "generic panic",
-    "segfault/signal",
-    "permission denied",
-    "command not found",
-    "no such file",
-    "exit code nonzero",
-];
-
-/// Regex patterns corresponding to [`PATTERN_NAMES`].
-const PATTERNS: &[&str] = &[
+/// Pattern catalogue: each entry is `(human_label, regex_pattern)`.
+const PATTERN_DEFS: &[(&str, &str)] = &[
     // gcc / clang: "file.c:10:5: error: ..."
-    r"(?m)^[^\s:]+:\d+:\d+:\s+error:",
+    ("gcc/clang error", r"(?m)^[^\s:]+:\d+:\d+:\s+error:"),
     // gcc / clang warning
-    r"(?m)^[^\s:]+:\d+:\d+:\s+warning:",
+    ("gcc/clang warning", r"(?m)^[^\s:]+:\d+:\d+:\s+warning:"),
     // rustc: "error[E0308]: ..."
-    r"(?m)^error(\[E\d+\])?:",
+    ("rustc error", r"(?m)^error(\[E\d+\])?:"),
     // rustc warning
-    r"(?m)^warning(\[.+\])?:",
+    ("rustc warning", r"(?m)^warning(\[.+\])?:"),
     // TypeScript: "src/file.ts(10,5): error TS..."
-    r"(?m)[^\s]+\.tsx?\(\d+,\d+\):\s+error\s+TS\d+:",
+    ("typescript error", r"(?m)[^\s]+\.tsx?\(\d+,\d+\):\s+error\s+TS\d+:"),
     // .NET / MSBuild: "file.cs(10,5): error CS..."
-    r"(?m)[^\s]+\(\d+,\d+\):\s+error\s+[A-Z]+\d+:",
+    ("dotnet error", r"(?m)[^\s]+\(\d+,\d+\):\s+error\s+[A-Z]+\d+:"),
     // .NET build failed
-    r"(?mi)Build\s+FAILED",
+    ("dotnet build failed", r"(?mi)Build\s+FAILED"),
     // npm ERR!
-    r"(?m)^npm\s+ERR!",
+    ("npm error", r"(?m)^npm\s+ERR!"),
     // Python traceback header
-    r"(?m)^Traceback \(most recent call last\):",
+    ("python traceback", r"(?m)^Traceback \(most recent call last\):"),
     // Python error line (e.g. "ValueError: ...")
-    r"(?m)^[A-Za-z]*Error:\s",
+    ("python error line", r"(?m)^[A-Za-z]*Error:\s"),
     // Java exception: "Exception in thread ..."
-    r"(?m)Exception in thread\b",
+    ("java exception", r"(?m)Exception in thread\b"),
     // Java stack trace frame
-    r"(?m)^\s+at\s+[a-zA-Z0-9.$_]+\(.*\.java:\d+\)",
+    ("java stack frame", r"(?m)^\s+at\s+[a-zA-Z0-9.$_]+\(.*\.java:\d+\)"),
     // Go error
-    r"(?m)^\.?/[^\s:]+\.go:\d+:\d+:",
+    ("go error", r"(?m)^\.?/[^\s:]+\.go:\d+:\d+:"),
     // Generic "error:" (case-insensitive)
-    r"(?mi)^\s*error\s*:",
+    ("generic error:", r"(?mi)^\s*error\s*:"),
     // Generic "FAILED"
-    r"(?m)\bFAILED\b",
+    ("generic FAILED", r"(?m)\bFAILED\b"),
     // Generic "fatal:" (git, etc.)
-    r"(?mi)^\s*fatal\s*:",
+    ("generic fatal:", r"(?mi)^\s*fatal\s*:"),
     // Generic "FATAL"
-    r"(?m)\bFATAL\b",
+    ("generic FATAL", r"(?m)\bFATAL\b"),
     // Panic (Rust, Go, etc.)
-    r"(?m)^thread\s+'[^']+'\s+panicked\s+at|^panic:",
+    ("generic panic", r"(?m)^thread\s+'[^']+'\s+panicked\s+at|^panic:"),
     // Segfault / signal
-    r"(?mi)Segmentation fault|SIGSEGV|SIGABRT|SIGBUS",
+    ("segfault/signal", r"(?mi)Segmentation fault|SIGSEGV|SIGABRT|SIGBUS"),
     // Permission denied
-    r"(?mi)Permission denied",
+    ("permission denied", r"(?mi)Permission denied"),
     // Command not found
-    r"(?mi)command not found|is not recognized",
+    ("command not found", r"(?mi)command not found|is not recognized"),
     // No such file or directory
-    r"(?mi)No such file or directory",
+    ("no such file", r"(?mi)No such file or directory"),
     // Exit code
-    r"(?mi)exit(?:ed)?\s+(?:with\s+)?(?:status|code)\s+[1-9]\d*",
+    ("exit code nonzero", r"(?mi)exit(?:ed)?\s+(?:with\s+)?(?:status|code)\s+[1-9]\d*"),
 ];
 
 // ── ErrorDetector ──────────────────────────────────────────────────
@@ -111,9 +84,9 @@ pub struct ErrorDetector {
 impl ErrorDetector {
     /// Build a new detector with the built-in pattern catalogue.
     pub fn new() -> Self {
-        Self {
-            patterns: RegexSet::new(PATTERNS).expect("error patterns should compile"),
-        }
+        let patterns: Vec<&str> = PATTERN_DEFS.iter().map(|(_, p)| *p).collect();
+        let set = RegexSet::new(&patterns).expect("error patterns should compile");
+        Self { patterns: set }
     }
 
     /// Scan `text` and return all matched error patterns with line numbers.
@@ -127,9 +100,10 @@ impl ErrorDetector {
                         line_number,
                         line: line.to_string(),
                         pattern_index: idx,
-                        pattern_name: PATTERN_NAMES
+                        pattern_name: PATTERN_DEFS
                             .get(idx)
-                            .unwrap_or(&"unknown")
+                            .map(|(name, _)| *name)
+                            .unwrap_or("unknown")
                             .to_string(),
                     });
                 }
@@ -291,11 +265,10 @@ mod tests {
     }
 
     #[test]
-    fn pattern_count_matches_names() {
-        assert_eq!(
-            PATTERNS.len(),
-            PATTERN_NAMES.len(),
-            "PATTERNS and PATTERN_NAMES must have the same length"
+    fn pattern_defs_non_empty() {
+        assert!(
+            !PATTERN_DEFS.is_empty(),
+            "PATTERN_DEFS must contain at least one entry"
         );
     }
 

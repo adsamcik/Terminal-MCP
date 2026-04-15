@@ -1,7 +1,7 @@
+pub mod ansi;
 pub mod error_detection;
 pub mod keys;
 pub mod logging;
-pub mod output;
 pub mod screenshot;
 pub mod scrollback;
 pub mod server;

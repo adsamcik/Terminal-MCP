@@ -375,6 +375,7 @@ async fn handle_info(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<()>
 
     let info = session.info().await;
     let idle_ms = session.idle_duration_ms().await;
+    let shell_integration = session.shell_integration_status_str().await;
     let resp = session
         .with_vt(|vt| {
             introspection::build_session_info(
@@ -383,7 +384,7 @@ async fn handle_info(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<()>
                 &session.config.args,
                 session.config.cwd.as_deref(),
                 idle_ms,
-                "unavailable",
+                &shell_integration,
             )
         })
         .await;
