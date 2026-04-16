@@ -4,6 +4,7 @@
 //! - [`handle_wait_for`]: wait for a specific pattern to appear (or disappear) in output
 //! - [`handle_wait_for_idle`]: wait until terminal output stops changing
 
+use std::future::Future;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -12,6 +13,7 @@ use serde_json::json;
 
 use crate::ansi::strip_ansi;
 use crate::session::Session;
+use crate::shell_integration::PromptStatus;
 
 /// Maximum input payload size (1 MiB) to prevent resource exhaustion.
 const MAX_INPUT_BYTES: usize = 1 << 20;
@@ -25,6 +27,11 @@ const WAIT_POLL_MS: u64 = 50;
 const SEND_AND_WAIT_IDLE_MS: u64 = 500;
 /// Visible-screen settle window for interactive screen navigation.
 const SEND_AND_WAIT_SCREEN_STABLE_MS: u64 = 100;
+/// Longer visible-screen settle window for launched screen flows that may stream
+/// partial updates with longer pauses between frames.
+const SEND_AND_WAIT_SCREEN_COMMAND_STABLE_MS: u64 = 750;
+/// Extra grace window before falling back to idle after an echo-only screen update.
+const SEND_AND_WAIT_SCREEN_IDLE_FALLBACK_MS: u64 = 1_000;
 
 fn append_capped_tail(buf: &mut Vec<u8>, chunk: &[u8], max_bytes: usize) {
     if chunk.is_empty() {
@@ -42,6 +49,54 @@ fn append_capped_tail(buf: &mut Vec<u8>, chunk: &[u8], max_bytes: usize) {
         buf.drain(..overflow);
     }
     buf.extend_from_slice(chunk);
+}
+
+fn normalize_wait_text(text: &str) -> String {
+    strip_ansi(text).replace(['\r', '\n'], "").trim().to_string()
+}
+
+fn looks_like_only_echo(output: &str, input: &str) -> bool {
+    let normalized_input = normalize_wait_text(input);
+    !normalized_input.is_empty() && normalize_wait_text(output) == normalized_input
+}
+
+fn last_nonempty_screen_line(screen: &str) -> Option<String> {
+    screen
+        .lines()
+        .rev()
+        .find_map(|line| {
+            let trimmed = line.trim_end();
+            (!trimmed.is_empty()).then_some(trimmed.to_string())
+        })
+}
+
+fn screen_change_looks_like_command_echo(previous: &str, current: &str, input: &str) -> bool {
+    let normalized_input = normalize_wait_text(input);
+    if normalized_input.is_empty() {
+        return false;
+    }
+
+    let Some(previous_line) = last_nonempty_screen_line(previous) else {
+        return false;
+    };
+    let Some(current_line) = last_nonempty_screen_line(current) else {
+        return false;
+    };
+
+    let previous_line = normalize_wait_text(&previous_line);
+    let current_line = normalize_wait_text(&current_line);
+
+    current_line != previous_line
+        && current_line.starts_with(&previous_line)
+        && current_line.ends_with(&normalized_input)
+}
+
+async fn capture_screen_baseline<F>(capture: F) -> (String, Instant)
+where
+    F: Future<Output = String>,
+{
+    let screen = capture.await;
+    (screen, Instant::now())
 }
 
 /// Send input to a terminal session and wait for expected output.
@@ -67,6 +122,31 @@ pub async fn handle_send_and_wait(
 
     let timeout_ms = timeout_ms.min(MAX_TIMEOUT_MS);
 
+    // Establish a fresh delta/screen baseline so this call only reports output
+    // produced by the new input, not unread session backlog from earlier activity.
+    let pattern = wait_for
+        .map(|p| RegexBuilder::new(p).size_limit(1_000_000).build())
+        .transpose()
+        .context("Invalid wait_for regex")?;
+    let prefer_screen_stable_wait =
+        pattern.is_none() && matches!(output_mode, "screen" | "both");
+    let use_prompt_ready_wait =
+        pattern.is_none() && output_mode == "delta" && press_enter && session.is_likely_interactive_shell();
+    let screen_stable_ms = if prefer_screen_stable_wait && press_enter {
+        SEND_AND_WAIT_SCREEN_COMMAND_STABLE_MS
+    } else {
+        SEND_AND_WAIT_SCREEN_STABLE_MS
+    };
+    let _ = session.read_new_output_chunk().await;
+
+    let mut last_screen = None;
+    let mut last_screen_change = Instant::now();
+    if prefer_screen_stable_wait {
+        let (screen, baseline_captured_at) = capture_screen_baseline(session.get_screen_contents()).await;
+        last_screen = Some(screen);
+        last_screen_change = baseline_captured_at;
+    }
+
     // 1. Send input
     let mut bytes = input.as_bytes().to_vec();
     if press_enter {
@@ -78,25 +158,12 @@ pub async fn handle_send_and_wait(
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
     let mut matched = false;
     let mut match_text: Option<String> = None;
-    let pattern = wait_for
-        .map(|p| RegexBuilder::new(p).size_limit(1_000_000).build())
-        .transpose()
-        .context("Invalid wait_for regex")?;
-    let use_screen_stable_shortcut =
-        pattern.is_none() && !press_enter && matches!(output_mode, "screen" | "both");
 
     let mut accumulated_output = Vec::new();
     let mut dropped_bytes = 0usize;
-    let mut baseline_screen = None;
-    let mut last_screen = None;
     let mut screen_changed = false;
-    let mut last_screen_change = Instant::now();
-
-    if use_screen_stable_shortcut {
-        let screen = session.get_screen_contents().await;
-        baseline_screen = Some(screen.clone());
-        last_screen = Some(screen);
-    }
+    let mut observed_non_echo_output = !press_enter || input.trim().is_empty();
+    let require_meaningful_screen_change = prefer_screen_stable_wait && press_enter;
 
     loop {
         if Instant::now() >= deadline {
@@ -124,25 +191,49 @@ pub async fn handle_send_and_wait(
                 break;
             }
         } else {
-            if use_screen_stable_shortcut {
+            let new_output = session.read_new_output_chunk().await;
+            dropped_bytes = dropped_bytes.saturating_add(new_output.dropped_bytes);
+            append_capped_tail(&mut accumulated_output, &new_output.bytes, MAX_MATCH_BUFFER_BYTES);
+            if !observed_non_echo_output
+                && !looks_like_only_echo(&String::from_utf8_lossy(&accumulated_output), input)
+            {
+                observed_non_echo_output = true;
+            }
+
+            if prefer_screen_stable_wait {
                 let current_screen = session.get_screen_contents().await;
                 if let Some(last) = &last_screen {
                     if &current_screen != last {
-                        last_screen = Some(current_screen.clone());
-                        last_screen_change = Instant::now();
-                        if let Some(baseline) = &baseline_screen {
-                            if &current_screen != baseline {
-                                screen_changed = true;
-                            }
+                        let echo_only_change = require_meaningful_screen_change
+                            && !screen_changed
+                            && screen_change_looks_like_command_echo(last, &current_screen, input);
+                        last_screen = Some(current_screen);
+                        if !require_meaningful_screen_change
+                            || screen_changed
+                            || !echo_only_change
+                        {
+                            last_screen_change = Instant::now();
+                            screen_changed = true;
                         }
                     } else if screen_changed
+                        && observed_non_echo_output
                         && last_screen_change.elapsed()
-                            >= Duration::from_millis(SEND_AND_WAIT_SCREEN_STABLE_MS)
+                            >= Duration::from_millis(screen_stable_ms)
                     {
                         matched = true;
                         break;
                     }
                 }
+            }
+
+            if use_prompt_ready_wait
+                && matches!(
+                    session.prompt_status().await,
+                    PromptStatus::Definite { .. } | PromptStatus::Probable
+                )
+            {
+                matched = true;
+                break;
             }
 
             // No pattern — fall back to idle for command-style execution or
@@ -151,8 +242,20 @@ pub async fn handle_send_and_wait(
                 .is_idle(Duration::from_millis(SEND_AND_WAIT_IDLE_MS))
                 .await
             {
-                matched = true;
-                break;
+                let allow_idle_fallback = if prefer_screen_stable_wait {
+                    screen_changed
+                        && observed_non_echo_output
+                        && last_screen_change.elapsed()
+                            >= Duration::from_millis(SEND_AND_WAIT_SCREEN_IDLE_FALLBACK_MS)
+                } else if use_prompt_ready_wait {
+                    false
+                } else {
+                    observed_non_echo_output
+                };
+                if allow_idle_fallback {
+                    matched = true;
+                    break;
+                }
             }
         }
     }
@@ -196,6 +299,28 @@ pub async fn handle_send_and_wait(
     };
 
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_screen_baseline;
+    use std::time::{Duration, Instant};
+
+    #[tokio::test]
+    async fn capture_screen_baseline_timestamps_after_capture_completes() {
+        let started = Instant::now();
+        let (screen, captured_at) = capture_screen_baseline(async {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            "READY".to_string()
+        })
+        .await;
+
+        assert_eq!(screen, "READY");
+        assert!(
+            captured_at.duration_since(started) >= Duration::from_millis(20),
+            "baseline timestamp should be recorded after the initial screen capture completes"
+        );
+    }
 }
 
 /// Wait for a pattern to appear (or disappear if `invert`) in terminal output,

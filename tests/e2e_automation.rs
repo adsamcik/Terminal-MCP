@@ -2,7 +2,7 @@
 //! Run with: cargo test --test e2e_automation -- --test-threads=1 --nocapture
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use terminal_mcp::error_detection::ErrorDetector;
 use terminal_mcp::session::{Session, SessionConfig, SessionManager};
@@ -57,6 +57,110 @@ fn powershell_screen_stable_config() -> SessionConfig {
     }
 }
 
+fn powershell_press_enter_screen_stable_config() -> SessionConfig {
+    SessionConfig {
+        command: Some("powershell.exe".to_string()),
+        args: vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            concat!(
+                "$ErrorActionPreference='Stop'; ",
+                "$buffer=''; ",
+                "[Console]::Write('READY 0> '); ",
+                "while ($true) { ",
+                "  $key = [Console]::ReadKey($true); ",
+                "  if ($key.Key -eq [ConsoleKey]::Enter) { ",
+                "    Start-Sleep -Milliseconds 650; ",
+                "    [Console]::Write(\"`rREADY 1> \"); ",
+                "    1..20 | ForEach-Object { ",
+                "      [Console]::Write(([string][char]27) + '[6n'); ",
+                "      Start-Sleep -Milliseconds 20 ",
+                "    }; ",
+                "    $buffer = ''; ",
+                "  } elseif ($key.KeyChar -eq 'q') { ",
+                "    break ",
+                "  } else { ",
+                "    $buffer += $key.KeyChar; ",
+                "    [Console]::Write($key.KeyChar) ",
+                "  } ",
+                "}"
+            )
+            .to_string(),
+        ],
+        cwd: None,
+        env: Default::default(),
+        rows: 24,
+        cols: 80,
+        scrollback: 1000,
+    }
+}
+
+fn powershell_press_enter_streaming_screen_config() -> SessionConfig {
+    SessionConfig {
+        command: Some("powershell.exe".to_string()),
+        args: vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            concat!(
+                "$ErrorActionPreference='Stop'; ",
+                "[Console]::Write('READY 0> '); ",
+                "while ($true) { ",
+                "  $key = [Console]::ReadKey($true); ",
+                "  if ($key.Key -eq [ConsoleKey]::Enter) { ",
+                "    [Console]::Write(\"`rREADY 1> \"); ",
+                "    Start-Sleep -Milliseconds 600; ",
+                "    [Console]::Write(\"`rREADY 2> \"); ",
+                "  } elseif ($key.KeyChar -eq 'q') { ",
+                "    break ",
+                "  } else { ",
+                "    [Console]::Write($key.KeyChar) ",
+                "  } ",
+                "}"
+            )
+            .to_string(),
+        ],
+        cwd: None,
+        env: Default::default(),
+        rows: 24,
+        cols: 80,
+        scrollback: 1000,
+    }
+}
+
+fn powershell_stale_output_config() -> SessionConfig {
+    SessionConfig {
+        command: Some("powershell.exe".to_string()),
+        args: vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            concat!(
+                "$ErrorActionPreference='Stop'; ",
+                "[Console]::Write(\"STALE BANNER`r`nREADY> \"); ",
+                "while ($true) { ",
+                "  $key = [Console]::ReadKey($true); ",
+                "  if ($key.Key -eq [ConsoleKey]::Enter) { ",
+                "    Start-Sleep -Milliseconds 700; ",
+                "    [Console]::Write(\"`rFRESH READY> \"); ",
+                "  } elseif ($key.KeyChar -eq 'q') { ",
+                "    break ",
+                "  } else { ",
+                "    [Console]::Write($key.KeyChar) ",
+                "  } ",
+                "}"
+            )
+            .to_string(),
+        ],
+        cwd: None,
+        env: Default::default(),
+        rows: 24,
+        cols: 80,
+        scrollback: 1000,
+    }
+}
+
 /// Create a session, wait for it to settle, and return (manager, session).
 async fn create_settled_session() -> (SessionManager, Arc<Session>, String) {
     let mgr = SessionManager::new();
@@ -92,6 +196,62 @@ async fn create_screen_stable_session() -> (SessionManager, Arc<Session>, String
     }
 
     panic!("PowerShell screen-stable test session did not initialize");
+}
+
+async fn create_press_enter_screen_stable_session() -> (SessionManager, Arc<Session>, String) {
+    let mgr = SessionManager::new();
+    let info = mgr
+        .create_session_async(powershell_press_enter_screen_stable_config())
+        .await
+        .unwrap();
+    let session = mgr.get_session(&info.session_id).unwrap();
+
+    for _ in 0..30 {
+        if session.get_screen_contents().await.contains("READY 0>") {
+            let _ = session.read_new_output().await;
+            return (mgr, session, info.session_id);
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    panic!("PowerShell press-enter screen-stable test session did not initialize");
+}
+
+async fn create_press_enter_streaming_screen_session() -> (SessionManager, Arc<Session>, String) {
+    let mgr = SessionManager::new();
+    let info = mgr
+        .create_session_async(powershell_press_enter_streaming_screen_config())
+        .await
+        .unwrap();
+    let session = mgr.get_session(&info.session_id).unwrap();
+
+    for _ in 0..30 {
+        if session.get_screen_contents().await.contains("READY 0>") {
+            let _ = session.read_new_output().await;
+            return (mgr, session, info.session_id);
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    panic!("PowerShell press-enter streaming screen session did not initialize");
+}
+
+async fn create_stale_output_session() -> (SessionManager, Arc<Session>, String) {
+    let mgr = SessionManager::new();
+    let info = mgr
+        .create_session_async(powershell_stale_output_config())
+        .await
+        .unwrap();
+    let session = mgr.get_session(&info.session_id).unwrap();
+
+    for _ in 0..30 {
+        if session.get_screen_contents().await.contains("READY>") {
+            return (mgr, session, info.session_id);
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    panic!("PowerShell stale-output test session did not initialize");
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -237,7 +397,39 @@ async fn send_and_wait_output_mode_screen() {
     cleanup(&mgr, session, &id).await;
 }
 
-/// 6. Output mode both: verify both output and screen present.
+/// 6. Delta mode should not complete on echoed input alone when real output arrives later.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_and_wait_delta_mode_waits_for_non_echo_output() {
+    let (mgr, session, id) = create_settled_session().await;
+
+    let result = handle_send_and_wait(
+        &session,
+        "ping -n 2 127.0.0.1 >nul & echo DELAYED_DELTA_42",
+        true,
+        None,
+        4000,
+        "delta",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        result["timed_out"], false,
+        "Delta mode should wait for delayed output instead of returning on echoed input: {result}"
+    );
+    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert!(
+        result["output"]
+            .as_str()
+            .unwrap_or("")
+            .contains("DELAYED_DELTA_42"),
+        "Expected delayed output to be present before returning: {result}"
+    );
+
+    cleanup(&mgr, session, &id).await;
+}
+
+/// 7. Output mode both: verify both output and screen present.
 #[tokio::test(flavor = "multi_thread")]
 async fn send_and_wait_output_mode_both() {
     let (mgr, session, id) = create_settled_session().await;
@@ -269,7 +461,39 @@ async fn send_and_wait_output_mode_both() {
     cleanup(&mgr, session, &id).await;
 }
 
-/// 7. Press enter false: send text without executing.
+/// 8. Delta mode on interactive shells should wait for prompt return across bursty output.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_and_wait_delta_mode_waits_for_prompt_after_bursty_output() {
+    let (mgr, session, id) = create_settled_session().await;
+
+    let result = handle_send_and_wait(
+        &session,
+        "echo BURST_ONE & ping -n 2 127.0.0.1 >nul & echo BURST_TWO & ping -n 2 127.0.0.1 >nul & echo BURST_THREE",
+        true,
+        None,
+        6000,
+        "delta",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        result["timed_out"], false,
+        "Interactive shell delta mode should wait for prompt return across bursty output: {result}"
+    );
+    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    let output = result["output"].as_str().unwrap_or("");
+    assert!(output.contains("BURST_ONE"), "Expected first burst in output: {result}");
+    assert!(output.contains("BURST_TWO"), "Expected second burst in output: {result}");
+    assert!(
+        output.contains("BURST_THREE"),
+        "Expected final burst before prompt return: {result}"
+    );
+
+    cleanup(&mgr, session, &id).await;
+}
+
+/// 9. Press enter false: send text without executing.
 #[tokio::test(flavor = "multi_thread")]
 async fn send_and_wait_press_enter_false() {
     let (mgr, session, id) = create_settled_session().await;
@@ -313,7 +537,7 @@ async fn send_and_wait_press_enter_false() {
     cleanup(&mgr, session, &id).await;
 }
 
-/// 8. Screen-mode navigation should return once the visible screen settles,
+/// 10. Screen-mode navigation should return once the visible screen settles,
 /// even if the app keeps emitting non-visible control output.
 #[tokio::test(flavor = "multi_thread")]
 async fn send_and_wait_screen_mode_returns_before_idle_for_tui_navigation() {
@@ -343,11 +567,139 @@ async fn send_and_wait_screen_mode_returns_before_idle_for_tui_navigation() {
     cleanup(&mgr, session, &id).await;
 }
 
+/// 11. Screen-driven command launches should not complete on echoed input alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_and_wait_both_mode_press_enter_waits_for_visible_post_echo_update() {
+    let (mgr, session, id) = create_press_enter_screen_stable_session().await;
+
+    let result = handle_send_and_wait(
+        &session,
+        "launch",
+        true,
+        None,
+        2000,
+        "both",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        result["timed_out"], false,
+        "Screen mode should wait for the post-echo update instead of returning on idle: {result}"
+    );
+    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert!(
+        result["screen"].as_str().unwrap_or("").contains("READY 1>"),
+        "Expected the visible post-echo update to be present before returning: {result}"
+    );
+
+    cleanup(&mgr, session, &id).await;
+}
+
+/// 12. Screen mode should also wait for a post-echo screen change on slow-start launches.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_and_wait_screen_mode_press_enter_waits_for_visible_post_echo_update() {
+    let (mgr, session, id) = create_press_enter_screen_stable_session().await;
+    let started = Instant::now();
+
+    let result = handle_send_and_wait(
+        &session,
+        "launch",
+        true,
+        None,
+        2000,
+        "screen",
+    )
+    .await
+    .unwrap();
+    let elapsed = started.elapsed();
+
+    assert_eq!(
+        result["timed_out"], false,
+        "Screen mode should wait for the visible post-echo update instead of returning on command echo: {result}"
+    );
+    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert!(
+        result["screen"].as_str().unwrap_or("").contains("READY 1>"),
+        "Expected the visible post-echo update to be present before returning: {result}"
+    );
+    assert!(
+        elapsed >= Duration::from_millis(1400),
+        "Screen mode should hold the launched screen stable window after the visible post-echo change. elapsed={elapsed:?}, result={result}"
+    );
+
+    cleanup(&mgr, session, &id).await;
+}
+
+/// 13. Screen mode should not complete on a partial streamed screen update.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_and_wait_screen_mode_press_enter_waits_for_streamed_screen_update() {
+    let (mgr, session, id) = create_press_enter_streaming_screen_session().await;
+
+    let result = handle_send_and_wait(
+        &session,
+        "launch",
+        true,
+        None,
+        2000,
+        "screen",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        result["timed_out"], false,
+        "Screen mode should wait through a streamed screen response instead of returning on the first partial frame: {result}"
+    );
+    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert!(
+        result["screen"].as_str().unwrap_or("").contains("READY 2>"),
+        "Expected the final streamed screen state before returning: {result}"
+    );
+
+    cleanup(&mgr, session, &id).await;
+}
+
+/// 14. send_and_wait should ignore unread startup delta from before the new input.
+#[tokio::test(flavor = "multi_thread")]
+async fn send_and_wait_delta_mode_ignores_preexisting_unread_output() {
+    let (mgr, session, id) = create_stale_output_session().await;
+
+    let result = handle_send_and_wait(
+        &session,
+        "launch",
+        true,
+        None,
+        2000,
+        "delta",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        result["timed_out"], false,
+        "send_and_wait should wait for fresh post-input output instead of returning on unread startup delta: {result}"
+    );
+    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+
+    let output = result["output"].as_str().unwrap_or("");
+    assert!(
+        !output.contains("STALE BANNER"),
+        "Unread startup output should not leak into the new send_and_wait result: {result}"
+    );
+    assert!(
+        output.contains("FRESH READY>"),
+        "Expected fresh post-input output to appear before returning: {result}"
+    );
+
+    cleanup(&mgr, session, &id).await;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // wait_for tests
 // ═══════════════════════════════════════════════════════════════════
 
-/// 9. Pattern appears: send a command, then wait_for the output pattern.
+/// 15. Pattern appears: send a command, then wait_for the output pattern.
 #[tokio::test(flavor = "multi_thread")]
 async fn wait_for_pattern_appears() {
     let (mgr, session, id) = create_settled_session().await;
@@ -378,7 +730,7 @@ async fn wait_for_pattern_appears() {
     cleanup(&mgr, session, &id).await;
 }
 
-/// 10. Pattern timeout: wait for pattern that won't appear.
+/// 16. Pattern timeout: wait for pattern that won't appear.
 #[tokio::test(flavor = "multi_thread")]
 async fn wait_for_pattern_timeout() {
     let (mgr, session, id) = create_settled_session().await;
@@ -400,7 +752,7 @@ async fn wait_for_pattern_timeout() {
     cleanup(&mgr, session, &id).await;
 }
 
-/// 11. Invert mode: wait for a pattern to NOT be present.
+/// 16. Invert mode: wait for a pattern to NOT be present.
 #[tokio::test(flavor = "multi_thread")]
 async fn wait_for_invert_mode() {
     let (mgr, session, id) = create_settled_session().await;

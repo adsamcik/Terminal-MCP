@@ -73,7 +73,7 @@ src\main.rs -> src\server.rs
 ### 4. Automation
 
 1. `send_and_wait` routes through `src\server.rs` into `handle_send_and_wait` (`src\server.rs:310-335`, `src\tools\automation.rs:20-109`).
-2. The handler writes bytes to the session, then either polls for a regex match or waits for idle (`src\tools\automation.rs:28-77`).
+2. The handler writes bytes to the session, then either polls for a regex match or, without an explicit pattern, uses screen-settle detection for screen-oriented calls and prompt-return detection for interactive shell delta calls before falling back to idle when appropriate (`src\tools\automation.rs:28-77`).
 3. The response returns delta output, screen output, or both, depending on `output_mode` (`src\tools\automation.rs:79-109`).
 
 ### 5. Session shutdown

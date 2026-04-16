@@ -141,7 +141,7 @@ Create a new interactive terminal session with a PTY. Spawns the user's default 
 
 #### `send_and_wait`
 
-**The primary tool for command execution.** Sends input to a terminal and waits for the output to settle or match a pattern. Combines `send_text` + `wait_for` + `read_output` into one efficient call. When used for interactive screen navigation (`press_enter: false` with `output_mode: "screen"` or `"both"`), it returns once the visible screen settles instead of waiting for background control traffic to go idle.
+**The primary tool for command execution.** Sends input to a terminal and waits for the output to settle or match a pattern. Combines `send_text` + `wait_for` + `read_output` into one efficient call. Each call starts from a fresh unread-output baseline so prior unread session backlog does not contaminate the result. When `wait_for` is omitted, `screen` / `both` mode prefers waiting for the visible screen to settle before falling back to idle, and `delta` mode prefers prompt return for interactive shell sessions while still avoiding echo-only early returns.
 
 **Parameters:**
 
@@ -150,7 +150,7 @@ Create a new interactive terminal session with a PTY. Spawns the user's default 
 | `session_id` | string | Yes | — | Target session |
 | `input` | string | Yes | — | Text to send (typically a command) |
 | `press_enter` | bool | No | `true` | Press Enter after input |
-| `wait_for` | string | No | Wait for idle | Regex pattern to wait for |
+| `wait_for` | string | No | Screen settle, prompt return, or post-input output | Regex pattern to wait for |
 | `timeout_ms` | number | No | `30000` | Max wait time in ms |
 | `output_mode` | string | No | `"delta"` | `"delta"`, `"screen"`, or `"both"` |
 

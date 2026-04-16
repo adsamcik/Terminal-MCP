@@ -94,7 +94,7 @@ pub struct SendAndWaitParams {
     #[schemars(description = "Press Enter after sending input (default: true)")]
     pub press_enter: Option<bool>,
     #[schemars(
-        description = "Pattern (string or regex) to wait for. If omitted, waits for idle."
+        description = "Pattern (string or regex) to wait for. If omitted, screen/both mode waits for visible screen changes to settle before falling back to idle; delta mode prefers prompt return for interactive shell sessions and otherwise waits for post-input output instead of returning on echoed input alone."
     )]
     pub wait_for: Option<String>,
     #[schemars(description = "Maximum milliseconds to wait (default: 30000)")]

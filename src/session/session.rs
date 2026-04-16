@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::scrollback::ScrollbackBuffer;
-use crate::shell_integration::{IntegrationStatus, ShellIntegration};
+use crate::shell_integration::{IntegrationStatus, PromptStatus, ShellIntegration};
 use crate::terminal::{ColorSpan, PtyConfig, PtyDriver, PtyReader, VtParser};
 
 // -- Public types -----------------------------------------------------------
@@ -576,6 +576,43 @@ impl Session {
             IntegrationStatus::Unavailable => "unavailable",
         }
         .to_string()
+    }
+
+    /// Whether this session likely hosts an interactive shell prompt.
+    pub fn is_likely_interactive_shell(&self) -> bool {
+        let Some(command) = self.config.command.as_deref() else {
+            return true;
+        };
+
+        let executable = command
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(command)
+            .trim_end_matches(".exe")
+            .to_ascii_lowercase();
+
+        let has_any_flag = |flags: &[&str]| {
+            self.config
+                .args
+                .iter()
+                .any(|arg| flags.iter().any(|flag| arg.eq_ignore_ascii_case(flag)))
+        };
+
+        match executable.as_str() {
+            "cmd" => !has_any_flag(&["/c", "/r"]),
+            "powershell" | "pwsh" => {
+                !has_any_flag(&["-command", "-c", "-file", "-encodedcommand"])
+            }
+            "bash" | "sh" | "zsh" | "fish" => !has_any_flag(&["-c", "-lc"]),
+            _ => false,
+        }
+    }
+
+    /// Current prompt-detection status based on shell integration state and screen contents.
+    pub async fn prompt_status(&self) -> PromptStatus {
+        let vt = self.vt.lock().await;
+        let mut si = self.shell_integration.lock().await;
+        si.is_at_prompt(vt.screen())
     }
 
     /// Whether this session is visible to the given owner key.
