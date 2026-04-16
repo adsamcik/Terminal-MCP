@@ -498,6 +498,12 @@ impl Session {
         vt.cursor_position()
     }
 
+    /// Whether the cursor is currently visible.
+    pub async fn cursor_visible(&self) -> bool {
+        let vt = self.vt.lock().await;
+        vt.cursor_visible()
+    }
+
     /// Whether the alternate screen buffer is active (e.g. vim, less).
     ///
     /// See [`VtParser::is_alternate_screen`] for a known Windows/ConPTY

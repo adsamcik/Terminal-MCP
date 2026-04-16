@@ -81,8 +81,9 @@ pub struct SerializedGlyphStyle {
 
 /// Per-glyph style indices aligned to the `screen` text grid.
 ///
-/// Each row entry points into `palette`. When `include_cursor=true`, the
-/// synthetic `▏` cursor marker is encoded as `null` in `rows`.
+/// Each row entry points into `palette`. When `include_cursor=true` and the
+/// VT cursor is visible, the synthetic `▏` cursor marker is encoded as `null`
+/// in `rows`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct GlyphStyleGrid {
     pub palette: Vec<SerializedGlyphStyle>,
@@ -253,7 +254,7 @@ fn build_glyph_styles(
         bottom: rows.saturating_sub(1),
         right: cols.saturating_sub(1),
     });
-    let include_cursor = include_cursor && region.is_none();
+    let include_cursor = include_cursor && region.is_none() && vt.cursor_visible();
 
     let mut palette = vec![SerializedGlyphStyle::default()];
     let mut style_rows = Vec::new();
@@ -344,7 +345,7 @@ fn conpty_alternate_screen_note() -> Option<String> {
 
 /// Build a [`GetScreenResponse`] from the current parser state.
 ///
-/// * `include_cursor` — insert a `▏` marker at the cursor position.
+/// * `include_cursor` — insert a `▏` marker at the visible cursor position.
     /// * `include_colors` — attach color-span, highlight, and per-glyph style arrays.
 /// * `region` — if `Some`, read only a sub-rectangle of the screen.
 /// * `diff_mode` — if `true`, include only changed row indices and take a
@@ -359,6 +360,7 @@ pub fn get_screen(
     let screen_ref = vt.screen();
     let (rows, cols) = screen_ref.size();
     let (cursor_row, cursor_col) = vt.cursor_position();
+    let include_cursor = include_cursor && region.is_none() && vt.cursor_visible();
 
     // Screen text
     let screen_text = match region {
@@ -497,10 +499,11 @@ pub async fn handle_read_output(
 
     // Cursor position.
     let (row, col) = session.cursor_position().await;
+    let visible = session.cursor_visible().await;
     let cursor = CursorPosition {
         row,
         col,
-        visible: true,
+        visible,
     };
 
     let exit_code = session.cached_exit_code().await;

@@ -23,6 +23,29 @@ fn cmd_config() -> SessionConfig {
     }
 }
 
+fn hidden_cursor_config() -> SessionConfig {
+    SessionConfig {
+        command: Some("powershell.exe".to_string()),
+        args: vec![
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            concat!(
+                "$ErrorActionPreference='Stop'; ",
+                "[Console]::Write('CURSOR_HIDDEN'); ",
+                "[Console]::Write(([string][char]27) + '[?25l'); ",
+                "while ($true) { Start-Sleep -Milliseconds 100 }"
+            )
+            .to_string(),
+        ],
+        cwd: None,
+        env: Default::default(),
+        rows: 24,
+        cols: 80,
+        scrollback: 1000,
+    }
+}
+
 /// Create a session, wait for cmd.exe startup, and drain initial output.
 async fn setup_session(
     mgr: &SessionManager,
@@ -34,6 +57,25 @@ async fn setup_session(
     // Drain initial output so delta reads start fresh.
     let _ = session.read_new_output().await;
     (info.session_id, session)
+}
+
+async fn setup_hidden_cursor_session(
+    mgr: &SessionManager,
+) -> (String, std::sync::Arc<terminal_mcp::session::Session>) {
+    let info = mgr.create_session_async(hidden_cursor_config()).await.unwrap();
+    let session = mgr.get_session(&info.session_id).unwrap();
+
+    for _ in 0..30 {
+        if session.get_screen_contents().await.contains("CURSOR_HIDDEN")
+            && !session.cursor_visible().await
+        {
+            let _ = session.read_new_output().await;
+            return (info.session_id, session);
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    panic!("hidden-cursor PowerShell session did not initialize");
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -203,7 +245,52 @@ async fn get_screen_with_cursor() {
     mgr.close_session(&sid).await.unwrap();
 }
 
-/// 7. Screen content not empty after command.
+/// 7. read_output cursor metadata should match the VT parser's hidden cursor state.
+#[tokio::test(flavor = "multi_thread")]
+async fn read_output_reports_hidden_cursor_state() {
+    let mgr = SessionManager::new();
+    let (sid, session) = setup_hidden_cursor_session(&mgr).await;
+
+    let screen = call_get_screen(&session, false, false, false).await;
+    assert!(
+        !screen.cursor.visible,
+        "get_screen should report a hidden cursor for the simulated TUI session"
+    );
+
+    let resp = observation::handle_read_output(&session, Some(200), None)
+        .await
+        .unwrap();
+    assert!(
+        !resp.cursor.visible,
+        "read_output should preserve the VT cursor visibility state"
+    );
+
+    drop(session);
+    mgr.close_session(&sid).await.unwrap();
+}
+
+/// 8. Hidden cursors should not inject a synthetic marker into get_screen text.
+#[tokio::test(flavor = "multi_thread")]
+async fn get_screen_with_hidden_cursor_omits_marker() {
+    let mgr = SessionManager::new();
+    let (sid, session) = setup_hidden_cursor_session(&mgr).await;
+
+    let resp = call_get_screen(&session, true, false, false).await;
+    assert!(
+        !resp.cursor.visible,
+        "hidden-cursor session should report cursor.visible=false"
+    );
+    assert!(
+        !resp.screen.contains('▏'),
+        "get_screen should not inject a cursor marker when the cursor is hidden: {}",
+        resp.screen
+    );
+
+    drop(session);
+    mgr.close_session(&sid).await.unwrap();
+}
+
+/// 9. Screen content not empty after command.
 #[tokio::test(flavor = "multi_thread")]
 async fn get_screen_content_not_empty() {
     let mgr = SessionManager::new();

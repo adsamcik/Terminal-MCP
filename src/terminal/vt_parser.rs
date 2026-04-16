@@ -146,13 +146,14 @@ impl VtParser {
         let screen = self.parser.screen();
         let (rows, cols) = screen.size();
         let (cursor_row, cursor_col) = screen.cursor_position();
+        let cursor_visible = !screen.hide_cursor();
 
         let mut lines: Vec<String> = Vec::with_capacity(rows as usize);
 
         for row in 0..rows {
             let mut line = String::new();
             for col in 0..cols {
-                if row == cursor_row && col == cursor_col {
+                if cursor_visible && row == cursor_row && col == cursor_col {
                     line.push('▏');
                 }
                 if let Some(cell) = screen.cell(row, col) {
@@ -168,7 +169,7 @@ impl VtParser {
                 }
             }
             // Cursor at or past end of row
-            if row == cursor_row && cursor_col >= cols {
+            if cursor_visible && row == cursor_row && cursor_col >= cols {
                 line.push('▏');
             }
             lines.push(line.trim_end().to_string());
@@ -669,6 +670,15 @@ mod tests {
         assert!(lines.len() >= 2);
         assert_eq!(lines[0], "abc");
         assert!(lines[1].starts_with('▏'), "line1: {}", lines[1]);
+    }
+
+    #[test]
+    fn hidden_cursor_omits_marker() {
+        let mut vt = make(5, 20);
+        vt.process(b"abc");
+        vt.process(b"\x1b[?25l");
+        let text = vt.screen_contents_with_cursor();
+        assert!(!text.contains('▏'), "text: {text}");
     }
 
     // ── ANSI sequences and screen state ───────────────────────
