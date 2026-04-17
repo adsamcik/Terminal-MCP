@@ -11,8 +11,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,6 +20,10 @@ env:
 jobs:
   build:
     name: build ${{ matrix.target }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +34,14 @@ jobs:
             bin_ext: .exe
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            bin_ext: ""
+          - os: macos-14
+            target: aarch64-apple-darwin
+            archive: tar.gz
+            bin_ext: ""
+          - os: macos-13
+            target: x86_64-apple-darwin
             archive: tar.gz
             bin_ext: ""
     runs-on: ${{ matrix.os }}
@@ -72,7 +83,7 @@ jobs:
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
           "ARTIFACT=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Stage artifact (Linux)
+      - name: Stage artifact (Unix)
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
@@ -89,10 +100,18 @@ jobs:
         run: |
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "$ARTIFACT" > "$ARTIFACT.sha256"
+          elif command -v shasum >/dev/null 2>&1; then
+            # macOS ships shasum instead of sha256sum; output format matches.
+            shasum -a 256 "$ARTIFACT" > "$ARTIFACT.sha256"
           else
-            # Fallback for runners without sha256sum in PATH
+            # Fallback for runners without either in PATH (e.g. minimal Windows).
             pwsh -Command "(Get-FileHash -Algorithm SHA256 '$env:ARTIFACT').Hash.ToLower() + '  ' + (Split-Path -Leaf '$env:ARTIFACT')" > "$ARTIFACT.sha256"
           fi
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.ARTIFACT }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -108,6 +127,8 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
