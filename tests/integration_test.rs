@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 use terminal_mcp::session::{SessionConfig, SessionManager};
+use terminal_mcp::tools::automation::handle_send_and_wait;
 use tokio::time::sleep;
 
 fn cmd_config() -> SessionConfig {
@@ -43,8 +44,12 @@ async fn test_write_and_output() {
     let info = mgr.create_session_async(cmd_config()).await.unwrap();
     let session = mgr.get_session(&info.session_id).unwrap();
     sleep(Duration::from_secs(3)).await;
-    session.write_bytes(b"echo xyzzy_42\r").await.unwrap();
-    sleep(Duration::from_secs(3)).await;
+    // Prompt-aware settle: send the command and wait for echo+prompt return
+    // via hardened send_and_wait (both-mode waits for a meaningful screen
+    // change and applies a settle window; no raw timing guess).
+    let _ = handle_send_and_wait(&session, "echo xyzzy_42", true, None, 5_000, "both")
+        .await
+        .unwrap();
     let raw = session.get_full_output().await;
     let raw_text = String::from_utf8_lossy(&raw);
     let screen = session.get_screen_contents().await;

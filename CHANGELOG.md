@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   launches, streamed screen updates, screen stability timing, stale unread
   output, and hidden-cursor observation.
 
+### Changed
+
+- Replaced several `tokio::time::sleep`-based settlings in integration / E2E tests with prompt-aware `send_and_wait` calls, reducing timing-based flakiness. Tests remain Windows/`cmd.exe`-focused.
+
 ### Fixed
 
 - `send_text` now reliably types character-by-character into raw-input apps on Windows. Previously the PTY write of multi-byte strings could arrive as a single chunk, causing raw-mode consumers (e.g. `node --interactive`, TUIs) to see the input as a paste. A small inter-character delay now guarantees one chunk per character.
