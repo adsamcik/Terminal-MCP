@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- MSRV verification (`cargo check` on Rust 1.85) in CI.
+- MSRV verification (`cargo check` on Rust 1.88) in CI.
 - Weekly `cargo audit` workflow (`.github/workflows/audit.yml`).
 - `TERMINAL_MCP_IDLE_TIMEOUT` env var: when set, the server spawns a background task that evicts sessions idle longer than the configured duration. Default is unset (disabled), preserving prior behavior.
 - README: new Shell integration section with supported-shells matrix, `shell_integration_state` value meanings, and explicit limitations.

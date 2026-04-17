@@ -4,7 +4,7 @@ Thanks for your interest in contributing! terminal-mcp is an MCP server that giv
 
 ## Getting started
 
-1. Install a recent stable Rust toolchain (MSRV: **1.85**, edition 2024).
+1. Install a recent stable Rust toolchain (MSRV: **1.88**, edition 2024).
 2. Install components used by CI: `rustup component add rustfmt clippy`.
 3. Clone the repo and build:
 
