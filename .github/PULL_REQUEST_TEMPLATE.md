@@ -20,12 +20,11 @@ Thanks for contributing! Please fill in the sections below.
 ## Checklist
 
 - [ ] `cargo fmt --all -- --check` passes
-- [ ] `cargo clippy --all-targets` passes (no new warnings)
-- [ ] `cargo build --all-targets` succeeds
-- [ ] `cargo test` passes locally (note platform if Windows-only tests are affected)
-- [ ] Added or updated tests for the change
-- [ ] Updated `README.md` and/or `.github/context/` docs if behavior changed
-- [ ] Updated `CHANGELOG.md` under `## [Unreleased]` if user-visible
+- [ ] `cargo clippy --all-targets` passes with no new warnings
+- [ ] `cargo test --all-targets -- --test-threads=1` passes on Windows
+- [ ] `CHANGELOG.md` [Unreleased] updated if this is a user-visible change
+- [ ] Documentation updated if behavior changed (README, context files, or instructions)
+- [ ] Conventional Commit format in title/commits
 
 ## Notes for reviewers
 

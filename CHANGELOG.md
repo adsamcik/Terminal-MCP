@@ -9,12 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Changed
+
 - CI now fails on new `cargo clippy` warnings (`-D warnings`).
+- Refreshed `file:line` citations in `.github/context/ARCHITECTURE.md` and
+  `.github/context/PATTERNS.md` after formatter-driven reflow.
+- Contributor checklist in `.github/PULL_REQUEST_TEMPLATE.md` refreshed to
+  cover fmt, clippy, tests, CHANGELOG, and docs expectations.
 
 ### Added
 
 - MSRV verification (`cargo check` on Rust 1.85) in CI.
 - Weekly `cargo audit` workflow (`.github/workflows/audit.yml`).
+- macOS release binaries: `aarch64-apple-darwin` and `x86_64-apple-darwin`.
+- SLSA-style build provenance attestations on all release artifacts (via
+  `actions/attest-build-provenance`).
 - GitHub Actions release workflow that builds and uploads prebuilt
   `terminal-mcp` binaries for Windows (`x86_64-pc-windows-msvc`, zip) and
   Linux (`x86_64-unknown-linux-gnu`, tar.gz) — plus SHA-256 checksums —
