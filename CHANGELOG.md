@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `TERMINAL_MCP_IDLE_TIMEOUT` env var: when set, the server spawns a background task that evicts sessions idle longer than the configured duration. Default is unset (disabled), preserving prior behavior.
 - README: new Shell integration section with supported-shells matrix, `shell_integration_state` value meanings, and explicit limitations.
 - macOS release binaries: `aarch64-apple-darwin` and `x86_64-apple-darwin`.
 - SLSA-style build provenance attestations on all release artifacts (via

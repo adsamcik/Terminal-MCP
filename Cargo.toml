@@ -34,6 +34,7 @@ dashmap = "6"
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 http = "1"
+humantime = "2"
 
 [[bin]]
 name = "test-cli"
