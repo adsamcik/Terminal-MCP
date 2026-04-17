@@ -27,8 +27,25 @@ context-init:file: DEVELOPMENT
 | Observation E2E | `cargo test --test e2e_observation -- --test-threads=1 --nocapture` | `tests\e2e_observation.rs:1-4` |
 | Input E2E | `cargo test --test e2e_input -- --test-threads=1 --nocapture` | `tests\e2e_input.rs:1-2` |
 | Edge-case E2E | `cargo test --test e2e_edge_cases -- --test-threads=1 --nocapture` | `tests\e2e_edge_cases.rs:1-2` |
+| Format check | `cargo fmt --all -- --check` | `.github\workflows\ci.yml` (fmt job) |
+| Lint | `cargo clippy --all-targets` | `.github\workflows\ci.yml` (clippy job, Linux + Windows) |
 
-No dedicated lint or typecheck commands are defined in `Cargo.toml:1-34`.
+Formatting and linting are not declared in `Cargo.toml` but are gated by CI (`.github\workflows\ci.yml`). The CI pipeline does **not** pass `-D warnings`, so intentionally-retained API surface does not break the build; new clippy warnings in your diff should still be addressed.
+
+## Continuous integration and releases
+
+| Workflow | File | Trigger | What it does |
+| --- | --- | --- | --- |
+| CI | `.github\workflows\ci.yml` | `push`/`pull_request` to `main`, manual dispatch | `rustfmt` check (Linux), `clippy` + `cargo build` (Linux + Windows), full `cargo test --all-targets -- --test-threads=1` (Windows only, since PTY/ConPTY integration tests are Windows-centric). |
+| Release | `.github\workflows\release.yml` | Tag push matching `v*.*.*`, manual dispatch with tag | Builds `--release --locked` binaries for `x86_64-pc-windows-msvc` and `x86_64-unknown-linux-gnu`, packages them with `README.md`, `CHANGELOG.md`, and both LICENSE files as `.zip` / `.tar.gz`, emits SHA-256 checksums, extracts the matching `## [X.Y.Z]` section from `CHANGELOG.md` as release notes, and publishes a GitHub Release (pre-release when the tag contains `-`). |
+| Dependabot | `.github\dependabot.yml` | Weekly | Opens PRs for `cargo` and `github-actions` ecosystems (max 5 open PRs each). |
+
+`main` is a protected branch: all changes go through PRs. To cut a release, update `## [Unreleased]` in `CHANGELOG.md` under a new `## [X.Y.Z]` heading (land via PR), then tag and push:
+
+```bash
+git tag v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+```
 
 ## Environment variables
 
