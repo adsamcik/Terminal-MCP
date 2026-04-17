@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use terminal_mcp::keys::key_to_bytes;
 use terminal_mcp::session::{Session, SessionConfig, SessionManager};
+use terminal_mcp::tools::automation::handle_send_and_wait;
 use terminal_mcp::tools::input::{handle_send_keys, handle_send_text};
 use tokio::time::sleep;
 
@@ -50,8 +51,11 @@ async fn send_text_basic_echo() {
     let mgr = SessionManager::new();
     let (sid, session) = create_cmd_session(&mgr).await;
 
-    session.write_bytes(b"echo hello\r").await.unwrap();
-    sleep(Duration::from_secs(2)).await;
+    // Prompt-aware settle via hardened send_and_wait: in "screen" mode it
+    // waits for a meaningful screen change, not a fixed sleep.
+    let _ = handle_send_and_wait(&session, "echo hello", true, None, 5_000, "screen")
+        .await
+        .unwrap();
 
     let screen = session.get_screen_contents().await;
     assert!(

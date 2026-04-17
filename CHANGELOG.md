@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   launches, streamed screen updates, screen stability timing, stale unread
   output, and hidden-cursor observation.
 
+### Changed
+
+- Replaced several `tokio::time::sleep`-based settlings in integration / E2E tests with prompt-aware `send_and_wait` calls, reducing timing-based flakiness. Tests remain Windows/`cmd.exe`-focused.
+
 ### Fixed
 
 - `read_output` and `get_screen` now agree on cursor visibility by reading from
