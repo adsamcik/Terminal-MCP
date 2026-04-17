@@ -39,6 +39,8 @@ jobs:
   msrv:
     name: msrv (1.85)
     runs-on: ubuntu-latest
+    env:
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
@@ -47,7 +49,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: msrv-1.85
-      - run: cargo check --all-targets
+      - run: cargo generate-lockfile
+      - run: cargo check --all-targets --locked
 
   build:
     name: build (${{ matrix.os }})
