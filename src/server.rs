@@ -777,14 +777,74 @@ impl ServerHandler for TerminalMcpServer {
 // Entry point
 // ---------------------------------------------------------------------------
 
+/// Environment variable that opts into background idle-session cleanup.
+///
+/// Accepted values:
+/// - Plain integer seconds (e.g. `3600`).
+/// - Humantime-style durations (e.g. `1h`, `30m`, `90s`, `2h 30m`).
+///
+/// When unset, empty, or unparsable, no cleanup task is spawned.
+const IDLE_TIMEOUT_ENV: &str = "TERMINAL_MCP_IDLE_TIMEOUT";
+
+/// Parse a value from `TERMINAL_MCP_IDLE_TIMEOUT` into a `Duration`.
+///
+/// Returns `None` for empty input or unparsable values; callers should treat
+/// that as "cleanup disabled" without failing startup.
+fn parse_idle_timeout(raw: &str) -> Option<std::time::Duration> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(secs) = trimmed.parse::<u64>() {
+        return Some(std::time::Duration::from_secs(secs));
+    }
+    humantime::parse_duration(trimmed).ok()
+}
+
+/// Compute the poll interval for the cleanup task given an idle timeout.
+///
+/// Rule: `min(timeout / 4, 60s)` with a 5s floor so very small timeouts still
+/// yield a sane poll cadence.
+fn cleanup_poll_interval(idle_timeout: std::time::Duration) -> std::time::Duration {
+    let quarter = idle_timeout / 4;
+    let capped = std::cmp::min(quarter, std::time::Duration::from_secs(60));
+    std::cmp::max(capped, std::time::Duration::from_secs(5))
+}
+
 pub async fn run() -> Result<()> {
     tracing::info!("MCP server starting on stdio");
 
     let server = TerminalMcpServer::new();
-    // Start idle-session cleanup: reap sessions idle for more than 1 hour.
-    server
-        .session_manager
-        .start_cleanup_task(std::time::Duration::from_secs(3600));
+
+    match std::env::var(IDLE_TIMEOUT_ENV) {
+        Ok(raw) => match parse_idle_timeout(&raw) {
+            Some(timeout) => {
+                let interval = cleanup_poll_interval(timeout);
+                tracing::info!(
+                    idle_timeout_secs = timeout.as_secs(),
+                    poll_interval_secs = interval.as_secs(),
+                    "Starting idle-session cleanup task"
+                );
+                server
+                    .session_manager
+                    .start_cleanup_task_with_interval(timeout, interval);
+            }
+            None => {
+                tracing::warn!(
+                    value = %raw,
+                    env = IDLE_TIMEOUT_ENV,
+                    "Unparsable idle-timeout value; idle-session cleanup disabled"
+                );
+            }
+        },
+        Err(_) => {
+            tracing::debug!(
+                env = IDLE_TIMEOUT_ENV,
+                "Idle-session cleanup disabled (env var unset)"
+            );
+        }
+    }
+
     let service = server.serve(stdio()).await.inspect_err(|e| {
         tracing::error!("MCP serve error: {:?}", e);
     })?;
@@ -794,4 +854,60 @@ pub async fn run() -> Result<()> {
 
     tracing::info!("terminal-mcp server shutting down");
     Ok(())
+}
+
+#[cfg(test)]
+mod idle_timeout_tests {
+    use super::{cleanup_poll_interval, parse_idle_timeout};
+    use std::time::Duration;
+
+    #[test]
+    fn parses_plain_integer_seconds() {
+        assert_eq!(parse_idle_timeout("3600"), Some(Duration::from_secs(3600)));
+        assert_eq!(parse_idle_timeout("1"), Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn parses_humantime_strings() {
+        assert_eq!(parse_idle_timeout("1h"), Some(Duration::from_secs(3600)));
+        assert_eq!(parse_idle_timeout("30m"), Some(Duration::from_secs(1800)));
+        assert_eq!(parse_idle_timeout("90s"), Some(Duration::from_secs(90)));
+    }
+
+    #[test]
+    fn trims_whitespace() {
+        assert_eq!(parse_idle_timeout("  1s  "), Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn empty_or_whitespace_returns_none() {
+        assert_eq!(parse_idle_timeout(""), None);
+        assert_eq!(parse_idle_timeout("   "), None);
+    }
+
+    #[test]
+    fn invalid_value_returns_none() {
+        assert_eq!(parse_idle_timeout("not-a-duration"), None);
+        assert_eq!(parse_idle_timeout("-5"), None);
+        assert_eq!(parse_idle_timeout("10x"), None);
+    }
+
+    #[test]
+    fn poll_interval_respects_bounds() {
+        // Small timeout clamps to 5s floor.
+        assert_eq!(
+            cleanup_poll_interval(Duration::from_secs(1)),
+            Duration::from_secs(5)
+        );
+        // Mid-range uses timeout/4.
+        assert_eq!(
+            cleanup_poll_interval(Duration::from_secs(120)),
+            Duration::from_secs(30)
+        );
+        // Large timeout caps at 60s.
+        assert_eq!(
+            cleanup_poll_interval(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        );
+    }
 }
