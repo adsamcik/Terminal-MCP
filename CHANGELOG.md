@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed `file:line` citations in `.github/context/ARCHITECTURE.md` and
+  `.github/context/PATTERNS.md` after formatter-driven reflow.
+- Contributor checklist in `.github/PULL_REQUEST_TEMPLATE.md` refreshed to
+  cover fmt, clippy, tests, CHANGELOG, and docs expectations.
+
 ### Added
 
 - macOS release binaries: `aarch64-apple-darwin` and `x86_64-apple-darwin`.
