@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GitHub Actions release workflow that builds and uploads prebuilt
+  `terminal-mcp` binaries for Windows (`x86_64-pc-windows-msvc`, zip) and
+  Linux (`x86_64-unknown-linux-gnu`, tar.gz) — plus SHA-256 checksums —
+  whenever a `v*.*.*` tag is pushed, and creates a GitHub Release with
+  notes extracted from this changelog.
 - `send_and_wait` now resets its unread delta before sending input, so stale
   startup output or backlog from prior commands no longer leaks into the new
   command's result or triggers premature idle completion.

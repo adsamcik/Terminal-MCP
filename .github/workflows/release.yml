@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0). Must already exist."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: terminal-mcp
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+            bin_ext: .exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            bin_ext: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin ${{ env.BIN_NAME }}
+
+      - name: Resolve tag name
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stage artifact (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.tag.outputs.name }}"
+          $stage = "terminal-mcp-$tag-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ env.BIN_NAME }}${{ matrix.bin_ext }}" "$stage/"
+          Copy-Item README.md, CHANGELOG.md, LICENSE-MIT, LICENSE-APACHE "$stage/"
+          Compress-Archive -Path $stage -DestinationPath "$stage.zip"
+          "ARTIFACT=$stage.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Stage artifact (Linux)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.name }}"
+          stage="terminal-mcp-${tag}-${{ matrix.target }}"
+          mkdir "$stage"
+          cp "target/${{ matrix.target }}/release/${{ env.BIN_NAME }}${{ matrix.bin_ext }}" "$stage/"
+          cp README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$stage/"
+          tar -czf "$stage.tar.gz" "$stage"
+          echo "ARTIFACT=$stage.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Compute SHA-256 checksum
+        shell: bash
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ARTIFACT" > "$ARTIFACT.sha256"
+          else
+            # Fallback for runners without sha256sum in PATH
+            pwsh -Command "(Get-FileHash -Algorithm SHA256 '$env:ARTIFACT').Hash.ToLower() + '  ' + (Split-Path -Leaf '$env:ARTIFACT')" > "$ARTIFACT.sha256"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: |
+            ${{ env.ARTIFACT }}
+            ${{ env.ARTIFACT }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Resolve tag name
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract changelog section for this tag
+        id: notes
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.name }}"
+          version="${tag#v}"
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$version" '
+              BEGIN { capture = 0 }
+              /^## \[/ {
+                if (capture) exit
+                if (index($0, "[" ver "]") > 0) { capture = 1; next }
+              }
+              capture { print }
+            ' CHANGELOG.md > "$notes_file"
+          fi
+          if [ ! -s "$notes_file" ]; then
+            echo "Release $tag" > "$notes_file"
+            echo "" >> "$notes_file"
+            echo "See [CHANGELOG.md](CHANGELOG.md) for details." >> "$notes_file"
+          fi
+          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          body_path: ${{ steps.notes.outputs.file }}
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
