@@ -2,8 +2,16 @@
 name = "terminal-mcp"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-description = "MCP server for interactive terminal session management"
+description = "MCP (Model Context Protocol) server for interactive terminal session management via PTY"
+readme = "README.md"
+repository = "https://github.com/adsamcik/Terminal-MCP"
+homepage = "https://github.com/adsamcik/Terminal-MCP"
+keywords = ["mcp", "terminal", "pty", "tui", "automation"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["adsamcik <adsamcik@users.noreply.github.com>"]
+publish = false
 
 [dependencies]
 portable-pty = "0.9"
