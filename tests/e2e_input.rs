@@ -229,16 +229,22 @@ process.stdin.on('data', chunk => {
     };
     let (sid, session) = create_session(&mgr, config).await;
 
+    // Wait for the node helper to print READY so its stdin listener is attached
+    // before we send any bytes. On slow CI (GitHub Actions Windows runners), node
+    // can take several seconds to reach this point; without this gate the bytes
+    // arrive before the listener is registered and the test flakes.
+    let ready_output = wait_for_output(&session, "READY").await;
+    assert!(
+        ready_output.contains("READY"),
+        "Expected node raw-input app to start, got:\n{ready_output}"
+    );
+
     let result = handle_send_text(&session, "abc", false, None)
         .await
         .unwrap();
     assert_eq!(result["status"], "ok");
 
     let output = wait_for_output(&session, "VALUE:abc").await;
-    assert!(
-        output.contains("READY"),
-        "Expected node raw-input app to start, got:\n{output}"
-    );
     assert!(
         output.contains("VALUE:abc"),
         "Expected raw text input to arrive character-by-character, got:\n{output}"
