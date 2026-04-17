@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI now fails on new `cargo clippy` warnings (`-D warnings`).
+
 ### Added
 
+- MSRV verification (`cargo check` on Rust 1.85) in CI.
+- Weekly `cargo audit` workflow (`.github/workflows/audit.yml`).
 - GitHub Actions release workflow that builds and uploads prebuilt
   `terminal-mcp` binaries for Windows (`x86_64-pc-windows-msvc`, zip) and
   Linux (`x86_64-unknown-linux-gnu`, tar.gz) — plus SHA-256 checksums —

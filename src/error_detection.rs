@@ -4,6 +4,10 @@
 //! Uses a `RegexSet` for efficient multi-pattern matching and produces
 //! [`ErrorMatch`] records with line numbers and severity.
 
+// Retained: full error-detection surface kept for upcoming `detect_errors`
+// tool plumbing and downstream library consumers.
+#![allow(dead_code)]
+
 use regex::RegexSet;
 use serde::Serialize;
 

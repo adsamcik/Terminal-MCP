@@ -350,7 +350,7 @@ async fn test_idle_cleanup() {
 
     let mut removed = false;
     for _ in 0..15 {
-        if mgr.len() == 0 {
+        if mgr.is_empty() {
             removed = true;
             break;
         }

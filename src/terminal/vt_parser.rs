@@ -72,6 +72,9 @@ pub struct CellInfo {
     pub italic: bool,
     pub underline: bool,
     pub inverse: bool,
+    // Retained: wide-cell metadata is part of the public CellInfo surface
+    // even though current observation tools only emit `is_wide_continuation`.
+    #[allow(dead_code)]
     pub is_wide: bool,
     pub is_wide_continuation: bool,
 }
@@ -119,6 +122,9 @@ impl VtParser {
     }
 
     /// Resize the virtual screen to new dimensions.
+    // Retained: public VT parser surface used by downstream consumers of the
+    // library; `Session::resize` goes through `Screen::set_size` directly.
+    #[allow(dead_code)]
     pub fn set_size(&mut self, rows: u16, cols: u16) {
         self.parser.screen_mut().set_size(rows, cols);
     }
@@ -164,7 +170,7 @@ impl VtParser {
                     if text.is_empty() {
                         line.push(' ');
                     } else {
-                        line.push_str(&text);
+                        line.push_str(text);
                     }
                 }
             }
@@ -345,6 +351,9 @@ impl VtParser {
 
     /// Terminal byte stream that transforms `previous` into the current
     /// screen (via `vt100::Screen::contents_diff`).
+    // Retained: public VT parser surface used by downstream consumers of the
+    // library for efficient remote-terminal diff streaming.
+    #[allow(dead_code)]
     pub fn screen_diff(&self, previous: &vt100::Screen) -> Vec<u8> {
         self.parser.screen().contents_diff(previous)
     }
@@ -355,12 +364,18 @@ impl VtParser {
     }
 
     /// Reference to the previously saved snapshot, if any.
+    // Retained: public VT parser surface used by downstream consumers of the
+    // library that drive their own diffing.
+    #[allow(dead_code)]
     pub fn previous_snapshot(&self) -> Option<&vt100::Screen> {
         self.previous_screen.as_ref()
     }
 
     /// Row indices that changed between the stored snapshot and the current
     /// screen (0-based).  Returns an empty vec if no snapshot exists.
+    // Retained: public VT parser surface; only exercised from unit tests
+    // inside this module today.
+    #[allow(dead_code)]
     pub fn changed_rows(&self) -> Vec<u16> {
         let Some(prev) = &self.previous_screen else {
             return Vec::new();
@@ -434,7 +449,7 @@ impl VtParser {
                         if text.is_empty() {
                             current_text.push(' ');
                         } else {
-                            current_text.push_str(&text);
+                            current_text.push_str(text);
                         }
                     }
                 }
@@ -449,7 +464,7 @@ impl VtParser {
                         if text.is_empty() {
                             previous_text.push(' ');
                         } else {
-                            previous_text.push_str(&text);
+                            previous_text.push_str(text);
                         }
                     }
                 }
@@ -484,7 +499,7 @@ impl VtParser {
                     if text.is_empty() {
                         line.push(' ');
                     } else {
-                        line.push_str(&text);
+                        line.push_str(text);
                     }
                 }
             }
@@ -503,6 +518,9 @@ impl VtParser {
     /// Number of scrollback lines currently stored.
     ///
     /// Determined by probing the maximum scrollback position.
+    // Retained: public VT parser surface used by downstream consumers of the
+    // library; the bin exposes scrollback through `crate::scrollback`.
+    #[allow(dead_code)]
     pub fn scrollback_len(&mut self) -> usize {
         let saved = self.parser.screen().scrollback();
         self.parser.screen_mut().set_scrollback(usize::MAX);
@@ -517,6 +535,9 @@ impl VtParser {
     /// * `count` — maximum number of lines to return.
     ///
     /// Trailing whitespace is trimmed per line.
+    // Retained: public VT parser surface used by downstream consumers of the
+    // library; the bin exposes scrollback through `crate::scrollback`.
+    #[allow(dead_code)]
     pub fn scrollback_contents(&mut self, start: usize, count: usize) -> String {
         let total = self.scrollback_len();
         if total == 0 || count == 0 || start >= total {
@@ -556,7 +577,7 @@ impl VtParser {
                         if text.is_empty() {
                             line.push(' ');
                         } else {
-                            line.push_str(&text);
+                            line.push_str(text);
                         }
                     }
                 }

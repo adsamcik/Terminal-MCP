@@ -16,6 +16,8 @@ const MAX_LINE_BYTES: usize = 1_048_576; // 1 MB
 /// A single line stored in the scrollback buffer.
 pub struct ScrollbackLine {
     pub text: String,
+    // Retained: timestamp is recorded for future age-based scrollback queries.
+    #[allow(dead_code)]
     pub timestamp: Instant,
 }
 
@@ -134,6 +136,7 @@ impl ScrollbackBuffer {
     }
 
     /// Whether the buffer is empty.
+    #[allow(dead_code)] // Retained: paired with `len()` for library consumers.
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }

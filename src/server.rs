@@ -235,6 +235,9 @@ pub struct SearchOutputParams {
 pub struct TerminalMcpServer {
     #[allow(dead_code)]
     session_manager: Arc<SessionManager>,
+    // Retained: populated by `#[tool_router]` and consumed via the derived
+    // tool-routing machinery; clippy can't see the macro-internal usage.
+    #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
 }
 
@@ -251,6 +254,12 @@ fn png_dimensions(data: &[u8]) -> (u32, u32) {
     let width = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
     let height = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
     (width, height)
+}
+
+impl Default for TerminalMcpServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[tool_router]
