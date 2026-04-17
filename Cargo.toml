@@ -40,6 +40,10 @@ humantime = "2"
 name = "test-cli"
 path = "src/bin/test_cli.rs"
 
+[lints.clippy]
+collapsible_if = "allow"
+manual_is_multiple_of = "allow"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3"
