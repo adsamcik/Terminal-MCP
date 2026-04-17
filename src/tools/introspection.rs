@@ -229,7 +229,7 @@ pub struct SessionInfoResponse {
 /// Build a [`SessionInfoResponse`] from session metadata and VT parser state.
 ///
 /// * `info`              – basic session record (id, pid, command, size, status,
-///                         created_at).
+///   created_at).
 /// * `vt`                – reference to the session's VT parser.
 /// * `args`              – original command‑line arguments.
 /// * `cwd`               – working directory, if known.
@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(resp.status, "exited(0)");
         assert_eq!(
             resp.args,
-            vec!["la".to_string()]
+            ["la".to_string()]
                 .iter()
                 .map(|_| "-la".to_string())
                 .collect::<Vec<_>>()

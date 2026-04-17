@@ -2,7 +2,7 @@
 name = "terminal-mcp"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 description = "MCP (Model Context Protocol) server for interactive terminal session management via PTY"
 readme = "README.md"
@@ -39,6 +39,10 @@ humantime = "2"
 [[bin]]
 name = "test-cli"
 path = "src/bin/test_cli.rs"
+
+[lints.clippy]
+collapsible_if = "allow"
+manual_is_multiple_of = "allow"
 
 [dev-dependencies]
 tokio-test = "0.4"

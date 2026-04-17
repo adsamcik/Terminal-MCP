@@ -315,28 +315,6 @@ pub async fn handle_send_and_wait(
     Ok(response)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::capture_screen_baseline;
-    use std::time::{Duration, Instant};
-
-    #[tokio::test]
-    async fn capture_screen_baseline_timestamps_after_capture_completes() {
-        let started = Instant::now();
-        let (screen, captured_at) = capture_screen_baseline(async {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            "READY".to_string()
-        })
-        .await;
-
-        assert_eq!(screen, "READY");
-        assert!(
-            captured_at.duration_since(started) >= Duration::from_millis(20),
-            "baseline timestamp should be recorded after the initial screen capture completes"
-        );
-    }
-}
-
 /// Wait for a pattern to appear (or disappear if `invert`) in terminal output,
 /// or wait for a specified number of new output lines.
 ///
@@ -395,12 +373,10 @@ pub async fn handle_wait_for(
                     matched = true;
                     break;
                 }
-            } else {
-                if let Some(m) = found {
-                    matched = true;
-                    match_text = Some(m.as_str().to_string());
-                    break;
-                }
+            } else if let Some(m) = found {
+                matched = true;
+                match_text = Some(m.as_str().to_string());
+                break;
             }
 
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -537,5 +513,27 @@ pub async fn handle_wait_for_exit(session: &Session, timeout_ms: u64) -> Result<
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_screen_baseline;
+    use std::time::{Duration, Instant};
+
+    #[tokio::test]
+    async fn capture_screen_baseline_timestamps_after_capture_completes() {
+        let started = Instant::now();
+        let (screen, captured_at) = capture_screen_baseline(async {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            "READY".to_string()
+        })
+        .await;
+
+        assert_eq!(screen, "READY");
+        assert!(
+            captured_at.duration_since(started) >= Duration::from_millis(20),
+            "baseline timestamp should be recorded after the initial screen capture completes"
+        );
     }
 }

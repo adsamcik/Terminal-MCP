@@ -524,6 +524,9 @@ pub async fn handle_read_output(
 // ── Stub tools ─────────────────────────────────────────────────────
 
 /// Render a PNG screenshot of the terminal via fontdue + tiny-skia.
+// Retained: library-level helper; the MCP tool wires screenshots through
+// `crate::screenshot::render_screenshot` directly.
+#[allow(dead_code)]
 pub fn screenshot(vt: &VtParser, theme: &str, font_size: u32, scale: f32) -> Result<Vec<u8>> {
     crate::screenshot::render_screenshot(vt.screen(), theme, font_size, scale)
 }
@@ -684,10 +687,7 @@ mod tests {
         let resp1 = get_screen(&mut vt, false, false, None, true);
         assert!(
             resp1.changed_content.is_none()
-                || resp1
-                    .changed_content
-                    .as_ref()
-                    .map_or(true, |c| c.is_empty())
+                || resp1.changed_content.as_ref().is_none_or(|c| c.is_empty())
         );
 
         // Change content

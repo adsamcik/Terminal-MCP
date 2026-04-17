@@ -66,6 +66,8 @@ pub struct SessionInfo {
 }
 
 /// A single regex search match in the output log.
+// Retained: part of the public Session search API surface.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchMatch {
     pub byte_offset: usize,
@@ -159,6 +161,9 @@ impl RetainedOutput {
         }
     }
 
+    // Retained: full in-memory snapshot of the log is exposed to library
+    // consumers of `Session::get_full_output` via `RetainedOutput`.
+    #[allow(dead_code)]
     fn snapshot(&self) -> Vec<u8> {
         self.data.iter().copied().collect()
     }
@@ -232,6 +237,11 @@ fn extract_osc_payloads(data: &[u8]) -> Vec<String> {
     payloads
 }
 
+// Retained: convenience methods (`read_new_output`, screen content/color
+// getters, `get_full_output`, `search_output`, `is_alternate_screen`, `resize`,
+// `shutdown`) are part of the public library surface for downstream consumers
+// even though the MCP tool layer reaches through `_chunk` variants.
+#[allow(dead_code)]
 impl Session {
     /// Spawn a new session from the given configuration.
     ///
@@ -392,7 +402,7 @@ impl Session {
     pub(crate) async fn read_new_output_chunk(&self) -> OutputDelta {
         let log = self.output_log.lock().await;
         let mut pos = self.read_position.lock().await;
-        log.read_from(&mut *pos)
+        log.read_from(&mut pos)
     }
 
     /// Return output received since the last call (delta mode).

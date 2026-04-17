@@ -5,6 +5,11 @@
 //! integration) for definite prompt detection. Falls back to regex patterns
 //! and cursor position stability when shell integration is not active.
 
+// Retained: full shell-integration surface (ShellType, injection scripts,
+// status queries, Unavailable variant) is intentionally kept for upcoming
+// injection plumbing and downstream library consumers.
+#![allow(dead_code)]
+
 use std::time::{Duration, Instant};
 
 use regex::RegexSet;
@@ -116,6 +121,7 @@ impl ShellIntegration {
             return;
         }
 
+        #[allow(clippy::collapsible_match, clippy::collapsible_if)]
         match parts[0] {
             "133" | "633" => {
                 // Mark integration as externally active
@@ -266,7 +272,7 @@ impl ShellIntegration {
                     if text.is_empty() {
                         line.push(' ');
                     } else {
-                        line.push_str(&text);
+                        line.push_str(text);
                     }
                 }
             }

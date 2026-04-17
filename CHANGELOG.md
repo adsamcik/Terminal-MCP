@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI now fails on new `cargo clippy` warnings (`-D warnings`).
 - Refreshed `file:line` citations in `.github/context/ARCHITECTURE.md` and
   `.github/context/PATTERNS.md` after formatter-driven reflow.
 - Contributor checklist in `.github/PULL_REQUEST_TEMPLATE.md` refreshed to
@@ -16,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-### Added
-
+- MSRV verification (`cargo check` on Rust 1.88) in CI.
+- Weekly `cargo audit` workflow (`.github/workflows/audit.yml`).
 - `TERMINAL_MCP_IDLE_TIMEOUT` env var: when set, the server spawns a background task that evicts sessions idle longer than the configured duration. Default is unset (disabled), preserving prior behavior.
 - README: new Shell integration section with supported-shells matrix, `shell_integration_state` value meanings, and explicit limitations.
 - macOS release binaries: `aarch64-apple-darwin` and `x86_64-apple-darwin`.

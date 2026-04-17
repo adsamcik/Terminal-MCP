@@ -1,5 +1,6 @@
 mod manager;
+#[allow(clippy::module_inception)]
 mod session;
 
 pub use manager::SessionManager;
-pub use session::{SearchMatch, Session, SessionConfig, SessionId, SessionInfo, SessionStatus};
+pub use session::{Session, SessionConfig, SessionId, SessionInfo, SessionStatus};

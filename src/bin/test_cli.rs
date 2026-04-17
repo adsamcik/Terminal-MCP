@@ -166,15 +166,14 @@ async fn handle_create(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<(
     let command = rest
         .split_whitespace()
         .find(|w| !w.starts_with("--") && !w.contains('='))
-        .map(|s| {
+        .and_then(|s| {
             // Check if this was actually a flag value
             if rest.contains(&format!("--cwd {s}")) || rest.contains(&format!("--env {s}")) {
                 None
             } else {
                 Some(s.to_string())
             }
-        })
-        .flatten();
+        });
 
     let config = SessionConfig {
         command,

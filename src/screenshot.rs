@@ -25,6 +25,8 @@ pub const MAX_FONT_SIZE: u32 = 72;
 
 /// RGBA color theme for terminal rendering.
 pub struct Theme {
+    // Retained: theme name is surfaced by future introspection APIs.
+    #[allow(dead_code)]
     pub name: &'static str,
     pub background: [u8; 4],
     pub foreground: [u8; 4],
@@ -395,6 +397,62 @@ pub fn render_screenshot(
     Ok(png_bytes)
 }
 
+/// Paint a fontdue glyph bitmap onto the pixmap with the given foreground color.
+///
+/// Each byte in `bitmap` is a coverage value (0–255). We alpha-blend over
+/// the existing pixel.
+fn paint_glyph(
+    pixmap: &mut Pixmap,
+    bitmap: &[u8],
+    glyph_w: usize,
+    glyph_h: usize,
+    x0: i32,
+    y0: i32,
+    fg: [u8; 4],
+) {
+    let img_w = pixmap.width() as i32;
+    let img_h = pixmap.height() as i32;
+    let pixels = pixmap.data_mut();
+
+    for gy in 0..glyph_h {
+        let py = y0 + gy as i32;
+        if py < 0 || py >= img_h {
+            continue;
+        }
+        for gx in 0..glyph_w {
+            let px = x0 + gx as i32;
+            if px < 0 || px >= img_w {
+                continue;
+            }
+
+            let coverage = bitmap[gy * glyph_w + gx];
+            if coverage == 0 {
+                continue;
+            }
+
+            let offset = (py as usize * img_w as usize + px as usize) * 4;
+
+            if coverage == 255 {
+                // Fully opaque — direct write
+                pixels[offset] = fg[0];
+                pixels[offset + 1] = fg[1];
+                pixels[offset + 2] = fg[2];
+                pixels[offset + 3] = 255;
+            } else {
+                // Alpha-blend
+                let alpha = coverage as u16;
+                let inv = 255 - alpha;
+                pixels[offset] = ((fg[0] as u16 * alpha + pixels[offset] as u16 * inv) / 255) as u8;
+                pixels[offset + 1] =
+                    ((fg[1] as u16 * alpha + pixels[offset + 1] as u16 * inv) / 255) as u8;
+                pixels[offset + 2] =
+                    ((fg[2] as u16 * alpha + pixels[offset + 2] as u16 * inv) / 255) as u8;
+                pixels[offset + 3] = 255;
+            }
+        }
+    }
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -623,61 +681,5 @@ mod tests {
         let parser = vt100::Parser::new(3, 10, 0);
         let screen = parser.screen();
         assert!(render_screenshot(screen, "dark", 14, 999.0).is_ok());
-    }
-}
-
-/// Paint a fontdue glyph bitmap onto the pixmap with the given foreground color.
-///
-/// Each byte in `bitmap` is a coverage value (0–255). We alpha-blend over
-/// the existing pixel.
-fn paint_glyph(
-    pixmap: &mut Pixmap,
-    bitmap: &[u8],
-    glyph_w: usize,
-    glyph_h: usize,
-    x0: i32,
-    y0: i32,
-    fg: [u8; 4],
-) {
-    let img_w = pixmap.width() as i32;
-    let img_h = pixmap.height() as i32;
-    let pixels = pixmap.data_mut();
-
-    for gy in 0..glyph_h {
-        let py = y0 + gy as i32;
-        if py < 0 || py >= img_h {
-            continue;
-        }
-        for gx in 0..glyph_w {
-            let px = x0 + gx as i32;
-            if px < 0 || px >= img_w {
-                continue;
-            }
-
-            let coverage = bitmap[gy * glyph_w + gx];
-            if coverage == 0 {
-                continue;
-            }
-
-            let offset = (py as usize * img_w as usize + px as usize) * 4;
-
-            if coverage == 255 {
-                // Fully opaque — direct write
-                pixels[offset] = fg[0];
-                pixels[offset + 1] = fg[1];
-                pixels[offset + 2] = fg[2];
-                pixels[offset + 3] = 255;
-            } else {
-                // Alpha-blend
-                let alpha = coverage as u16;
-                let inv = 255 - alpha;
-                pixels[offset] = ((fg[0] as u16 * alpha + pixels[offset] as u16 * inv) / 255) as u8;
-                pixels[offset + 1] =
-                    ((fg[1] as u16 * alpha + pixels[offset + 1] as u16 * inv) / 255) as u8;
-                pixels[offset + 2] =
-                    ((fg[2] as u16 * alpha + pixels[offset + 2] as u16 * inv) / 255) as u8;
-                pixels[offset + 3] = 255;
-            }
-        }
     }
 }

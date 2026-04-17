@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use portable_pty::{Child, ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tokio::sync::mpsc;
-use tracing;
 
 /// Configuration for spawning a PTY session.
 #[derive(Debug, Clone)]
@@ -45,6 +44,9 @@ pub struct PtyDriver {
     /// Synchronous writer handle wrapped for thread-safe access.
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     /// Handle to the master side of the PTY (for resize operations).
+    // Retained: required to keep the PTY master side alive for the lifetime
+    // of the driver even though we only call through `killer` today.
+    #[allow(dead_code)]
     master: Box<dyn MasterPty + Send>,
     /// The child process spawned inside the PTY.
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
@@ -126,6 +128,7 @@ impl PtyDriver {
         let reader = master
             .try_clone_reader()
             .context("Failed to obtain PTY reader")?;
+        #[cfg_attr(not(windows), allow(unused_mut))]
         let mut writer = master
             .take_writer()
             .context("Failed to obtain PTY writer")?;
@@ -165,6 +168,9 @@ impl PtyDriver {
     }
 
     /// Write data to the PTY (sends input to the child process).
+    // Retained: library-level async write API; the binary routes writes via
+    // the cached `writer_handle` to avoid the PTY mutex.
+    #[allow(dead_code)]
     pub async fn write(&self, data: &[u8]) -> Result<()> {
         let writer = Arc::clone(&self.writer);
         let data = data.to_vec();
@@ -185,6 +191,9 @@ impl PtyDriver {
     }
 
     /// Resize the PTY to the given dimensions.
+    // Retained: exposed as part of the public PTY driver surface; callers
+    // currently reach Session::resize which goes via the VT parser.
+    #[allow(dead_code)]
     pub fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         self.master
             .resize(PtySize {
@@ -234,6 +243,9 @@ impl PtyDriver {
     ///
     /// Kills the child process (if still running), drops the writer to send
     /// EOF, and waits for the child to exit. Returns the exit status.
+    // Retained: graceful-close path is exposed to library consumers; the
+    // binary currently relies on Drop + `kill()` for tear-down.
+    #[allow(dead_code)]
     pub async fn close(self) -> Result<Option<portable_pty::ExitStatus>> {
         let child = Arc::clone(&self.child);
         let killer = Arc::clone(&self.killer);

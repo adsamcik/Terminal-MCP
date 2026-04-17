@@ -18,6 +18,16 @@ pub struct SessionManager {
     sessions: Arc<DashMap<SessionId, Arc<Session>>>,
 }
 
+impl Default for SessionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// Retained: convenience wrappers (non-owner `create_session`, `list_sessions`,
+// `get_session`, `with_session`) plus host-controlled `start_cleanup_task`
+// entry points are part of the public library surface.
+#[allow(dead_code)]
 impl SessionManager {
     pub fn new() -> Self {
         Self {
