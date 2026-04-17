@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bumped `rmcp` from 1.4.0 to 1.5.0. `cargo audit` reports zero advisories against
+  the full dependency tree.
 - CI now fails on new `cargo clippy` warnings (`-D warnings`).
 - Refreshed `file:line` citations in `.github/context/ARCHITECTURE.md` and
   `.github/context/PATTERNS.md` after formatter-driven reflow.
