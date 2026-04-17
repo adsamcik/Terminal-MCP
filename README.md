@@ -44,6 +44,44 @@ Add to your MCP client config (e.g. `mcp.json`):
 }
 ```
 
+## Shell integration
+
+Shell integration uses **OSC 133** (FinalTerm / iTerm2) and **OSC 633** (VS Code terminal integration) escape sequences that a shell emits to mark prompt start (`A`), prompt end / input ready (`B`), command start (`C`), and command finish with an exit code (`D;<code>`). When these markers flow through the PTY, terminal-mcp parses them in `src/shell_integration.rs::process_osc` and derives the session's `shell_integration_state`, the current shell phase, and — when the shell reports one — a definite last exit code without falling back to screen-scraping heuristics. OSC 7 (`file://host/path`) is also recognised to track the working directory. (See `src/shell_integration.rs` lines 102–168 and `src/session/session.rs` lines 315–326 for the wiring.)
+
+### Supported shells
+
+| Shell       | Auto-detect markers (OSC 133 / 633) | Auto-inject | Notes                                                                                                                                                                                                                   |
+|-------------|-------------------------------------|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| bash        | ✅                                  | ❌          | Injection script exists in-tree (`BASH_INTEGRATION`, `src/shell_integration.rs` L318–331) but is not wired into session startup today — use your existing shell integration (e.g. VS Code) or source the script yourself. |
+| zsh         | ✅                                  | ❌          | Injection script exists (`ZSH_INTEGRATION`, L333–344); same "not auto-sourced" caveat as bash.                                                                                                                           |
+| fish        | ✅                                  | ❌          | Injection script exists (`FISH_INTEGRATION`, L346–356); same caveat.                                                                                                                                                     |
+| PowerShell  | ✅                                  | ❌          | Injection script exists (`POWERSHELL_INTEGRATION`, L358–369); same caveat.                                                                                                                                               |
+| cmd.exe     | ✅ (if another integration emits them) | ❌        | No injection script provided; `ShellType::Cmd` returns `None` from `injection_script` (L227).                                                                                                                            |
+| Other / unknown | ✅ (if markers happen to be emitted) | ❌       | Falls back to regex + cursor-stability heuristics for prompt detection.                                                                                                                                                   |
+
+"Auto-detect" means terminal-mcp recognises and acts on OSC 133/633 markers whenever they arrive in PTY output — no configuration required. "Auto-inject" means terminal-mcp *itself* installs the integration into the spawned shell; today no code path does this, so the `injected` state below is currently unreachable without external wiring.
+
+### `shell_integration_state` values
+
+- `detecting` — initial state. The server has not yet observed any OSC 133/633 markers and has not given up on detection. Sessions that never receive markers stay here.
+- `active` — at least one OSC 133 or OSC 633 payload has arrived from the child process, meaning an external integration (e.g. VS Code's, or a user-sourced script) is already emitting markers. Exit codes reported via OSC 133;D are now trusted.
+- `injected` — the server itself injected an integration script into the shell. Defined in code (`IntegrationStatus::Injected`, `src/shell_integration.rs` L31) and honoured by prompt detection, but **no production call site sets this state today** — treat it as reserved for a future auto-inject feature.
+- `unavailable` — detection was actively given up on. Backed by `ShellIntegration::mark_unavailable` (L252), which is **currently only exercised by unit tests**; live sessions do not transition to this state today and remain in `detecting` indefinitely when no markers appear.
+
+### Limitations
+
+- **Shells not in the supported list rely on heuristics only.** Prompt detection falls back to a regex-match on the last non-empty screen line plus cursor-position stability (`is_at_prompt`, L177–216). Heuristics can produce `Probable` or `Unknown` results but never a `Definite` exit code.
+- **No auto-injection in the current release.** Even for bash / zsh / fish / PowerShell, the bundled injection scripts are not sourced into the spawned shell automatically. Users who want `active` state must rely on an existing marker-emitting integration (VS Code terminal, iTerm2 shell integration, Starship with FTCS enabled, a manually-sourced script, etc.).
+- **`unavailable` is not reached automatically.** There is no detection timeout in production code, so a session that never sees markers remains `detecting` for its lifetime.
+- **Injection (once wired) may fail in locked-down environments** — restricted `PROMPT_COMMAND`, read-only profiles, `set -u`, `noprofile`/`norc` flags, or security policies that block DEBUG traps can all prevent the marker-emitting functions from running.
+- **Exit-code reporting depends on markers when available.** With OSC 133;D (or 633;D) the exit code is authoritative. Without it, `read_output` falls back to whatever the reader task captured at EOF, which may be `exit_code = null` if the process is still running or the exact code was never observed.
+- **OSC 7 cwd tracking requires the shell to emit it.** The integration scripts do, but sessions without an active integration will not populate the cwd field even if the shell changes directories.
+- **Marker source is not authenticated.** Any program writing to the PTY can emit OSC 133/633 sequences and flip the session into `active` state; this is inherent to terminal escape sequences, not a terminal-mcp bug.
+
+### How to check
+
+Call the `get_session_info` MCP tool — the response includes a `shell_integration` field whose value is one of the strings above (see `src/server.rs` L685 and `src/tools/introspection.rs` L226). The `create_session` response does **not** include this field; its `SessionInfo` payload (`src/session/session.rs` L58–66) is limited to identity, pid, command, size, status, and `created_at`. Poll `get_session_info` after the shell has had a chance to print its first prompt to see a meaningful value.
+
 ## Configuration
 
 | Environment Variable | Description | Default |

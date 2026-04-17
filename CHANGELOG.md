@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- GitHub Actions release workflow that builds and uploads prebuilt
+- README: new Shell integration section with supported-shells matrix, `shell_integration_state` value meanings, and explicit limitations.
+- GitHub Actions release workflowthat builds and uploads prebuilt
   `terminal-mcp` binaries for Windows (`x86_64-pc-windows-msvc`, zip) and
   Linux (`x86_64-unknown-linux-gnu`, tar.gz) — plus SHA-256 checksums —
   whenever a `v*.*.*` tag is pushed, and creates a GitHub Release with

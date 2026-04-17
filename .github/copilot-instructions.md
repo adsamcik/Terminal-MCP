@@ -62,7 +62,7 @@ Rust MCP stdio server for PTY-backed terminal session management. Keep this file
 - `SessionInfo.created_at` is now reported as an RFC 3339 timestamp string, matching the README examples.
 - `read_output` returns `exit_code = null` when the exact exit code was never observed at EOF.
 - Idle cleanup support exists in `SessionManager`, but server startup does not begin cleanup automatically; keep docs explicit that hosts must opt in.
-- Shell integration state is reported live as `"detecting"`, `"active"`, `"injected"`, or `"unavailable"`.
+- Shell integration state is reported live as `"detecting"`, `"active"`, `"injected"`, or `"unavailable"`; see README Shell integration section for the support matrix and limitations.
 - Most integration/E2E tests are Windows-centric, `cmd.exe`-oriented, and use sleep-based settling.
 - `send_and_wait` semantics (see `src\tools\automation.rs` and `README.md`): always resets the unread delta before sending input; in `screen`/`both` mode without a pattern it waits for a meaningful visible screen change (longer settle window for slow-start TUIs); in `delta` mode on an interactive shell it prefers prompt return over raw idle; it never completes on echo alone.
 - `read_output` / `get_screen` report cursor visibility from the live VT state; `get_screen(include_cursor=true)` suppresses the cursor marker when the cursor is hidden.
