@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `send_text` now reliably types character-by-character into raw-input apps on Windows. Previously the PTY write of multi-byte strings could arrive as a single chunk, causing raw-mode consumers (e.g. `node --interactive`, TUIs) to see the input as a paste. A small inter-character delay now guarantees one chunk per character.
 - `read_output` and `get_screen` now agree on cursor visibility by reading from
   the VT parser's live state.
 - `get_screen(include_cursor=true)` no longer injects a synthetic cursor marker
