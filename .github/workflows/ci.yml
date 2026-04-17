@@ -47,7 +47,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: msrv-1.85
-      - run: cargo check --all-targets --locked
+      - run: cargo check --all-targets
 
   build:
     name: build (${{ matrix.os }})
