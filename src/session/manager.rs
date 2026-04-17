@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use dashmap::DashMap;
 use uuid::Uuid;
 
@@ -85,7 +85,10 @@ impl SessionManager {
                 let _ = session.close().await;
             }
             Err(arc) => {
-                tracing::warn!(session_id = id, "Session Arc has extra refs, forcing shutdown");
+                tracing::warn!(
+                    session_id = id,
+                    "Session Arc has extra refs, forcing shutdown"
+                );
                 arc.cancel.cancel();
                 let pty = arc.pty.lock().await;
                 pty.kill();

@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 use terminal_mcp::error_detection::ErrorDetector;
 use terminal_mcp::session::{Session, SessionConfig, SessionManager};
 use terminal_mcp::shell_integration::ShellIntegration;
-use terminal_mcp::tools::automation::{handle_send_and_wait, handle_wait_for, handle_wait_for_idle};
+use terminal_mcp::tools::automation::{
+    handle_send_and_wait, handle_wait_for, handle_wait_for_idle,
+};
 use tokio::time::sleep;
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -264,9 +266,11 @@ async fn send_and_wait_basic_echo() {
     let (mgr, session, id) = create_settled_session().await;
 
     let result = handle_send_and_wait(
-        &session, "echo hello", true, // press_enter
-        None,  // no pattern — wait for idle
-        5000,  // timeout_ms
+        &session,
+        "echo hello",
+        true, // press_enter
+        None, // no pattern — wait for idle
+        5000, // timeout_ms
         "delta",
     )
     .await
@@ -281,7 +285,10 @@ async fn send_and_wait_basic_echo() {
     let full = String::from_utf8_lossy(&full_raw);
     let screen = session.get_screen_contents().await;
     let found = output.contains("hello") || full.contains("hello") || screen.contains("hello");
-    assert!(found, "Expected 'hello' in output.\nresult_output: {output}\nscreen: {screen}");
+    assert!(
+        found,
+        "Expected 'hello' in output.\nresult_output: {output}\nscreen: {screen}"
+    );
 
     cleanup(&mgr, session, &id).await;
 }
@@ -387,7 +394,10 @@ async fn send_and_wait_output_mode_screen() {
     assert!(result["matched"].as_bool().unwrap());
     // screen mode should have "screen" field
     let screen = result["screen"].as_str().unwrap_or("");
-    assert!(!screen.is_empty(), "Screen mode should have non-empty 'screen' field");
+    assert!(
+        !screen.is_empty(),
+        "Screen mode should have non-empty 'screen' field"
+    );
     // screen mode should NOT have "output" field
     assert!(
         result.get("output").is_none(),
@@ -417,7 +427,10 @@ async fn send_and_wait_delta_mode_waits_for_non_echo_output() {
         result["timed_out"], false,
         "Delta mode should wait for delayed output instead of returning on echoed input: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
     assert!(
         result["output"]
             .as_str()
@@ -456,7 +469,10 @@ async fn send_and_wait_output_mode_both() {
         "'both' mode should have 'screen' field: {result}"
     );
     let screen = result["screen"].as_str().unwrap_or("");
-    assert!(!screen.is_empty(), "Screen should be non-empty in 'both' mode");
+    assert!(
+        !screen.is_empty(),
+        "Screen should be non-empty in 'both' mode"
+    );
 
     cleanup(&mgr, session, &id).await;
 }
@@ -481,10 +497,19 @@ async fn send_and_wait_delta_mode_waits_for_prompt_after_bursty_output() {
         result["timed_out"], false,
         "Interactive shell delta mode should wait for prompt return across bursty output: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
     let output = result["output"].as_str().unwrap_or("");
-    assert!(output.contains("BURST_ONE"), "Expected first burst in output: {result}");
-    assert!(output.contains("BURST_TWO"), "Expected second burst in output: {result}");
+    assert!(
+        output.contains("BURST_ONE"),
+        "Expected first burst in output: {result}"
+    );
+    assert!(
+        output.contains("BURST_TWO"),
+        "Expected second burst in output: {result}"
+    );
     assert!(
         output.contains("BURST_THREE"),
         "Expected final burst before prompt return: {result}"
@@ -543,22 +568,18 @@ async fn send_and_wait_press_enter_false() {
 async fn send_and_wait_screen_mode_returns_before_idle_for_tui_navigation() {
     let (mgr, session, id) = create_screen_stable_session().await;
 
-    let result = handle_send_and_wait(
-        &session,
-        "j",
-        false,
-        None,
-        700,
-        "screen",
-    )
-    .await
-    .unwrap();
+    let result = handle_send_and_wait(&session, "j", false, None, 700, "screen")
+        .await
+        .unwrap();
 
     assert_eq!(
         result["timed_out"], false,
         "Visible screen updates should not wait for invisible background output: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
     assert!(
         result["screen"].as_str().unwrap_or("").contains("READY 1"),
         "Expected updated screen content after navigation: {result}"
@@ -572,22 +593,18 @@ async fn send_and_wait_screen_mode_returns_before_idle_for_tui_navigation() {
 async fn send_and_wait_both_mode_press_enter_waits_for_visible_post_echo_update() {
     let (mgr, session, id) = create_press_enter_screen_stable_session().await;
 
-    let result = handle_send_and_wait(
-        &session,
-        "launch",
-        true,
-        None,
-        2000,
-        "both",
-    )
-    .await
-    .unwrap();
+    let result = handle_send_and_wait(&session, "launch", true, None, 2000, "both")
+        .await
+        .unwrap();
 
     assert_eq!(
         result["timed_out"], false,
         "Screen mode should wait for the post-echo update instead of returning on idle: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
     assert!(
         result["screen"].as_str().unwrap_or("").contains("READY 1>"),
         "Expected the visible post-echo update to be present before returning: {result}"
@@ -602,23 +619,19 @@ async fn send_and_wait_screen_mode_press_enter_waits_for_visible_post_echo_updat
     let (mgr, session, id) = create_press_enter_screen_stable_session().await;
     let started = Instant::now();
 
-    let result = handle_send_and_wait(
-        &session,
-        "launch",
-        true,
-        None,
-        2000,
-        "screen",
-    )
-    .await
-    .unwrap();
+    let result = handle_send_and_wait(&session, "launch", true, None, 2000, "screen")
+        .await
+        .unwrap();
     let elapsed = started.elapsed();
 
     assert_eq!(
         result["timed_out"], false,
         "Screen mode should wait for the visible post-echo update instead of returning on command echo: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
     assert!(
         result["screen"].as_str().unwrap_or("").contains("READY 1>"),
         "Expected the visible post-echo update to be present before returning: {result}"
@@ -636,22 +649,18 @@ async fn send_and_wait_screen_mode_press_enter_waits_for_visible_post_echo_updat
 async fn send_and_wait_screen_mode_press_enter_waits_for_streamed_screen_update() {
     let (mgr, session, id) = create_press_enter_streaming_screen_session().await;
 
-    let result = handle_send_and_wait(
-        &session,
-        "launch",
-        true,
-        None,
-        2000,
-        "screen",
-    )
-    .await
-    .unwrap();
+    let result = handle_send_and_wait(&session, "launch", true, None, 2000, "screen")
+        .await
+        .unwrap();
 
     assert_eq!(
         result["timed_out"], false,
         "Screen mode should wait through a streamed screen response instead of returning on the first partial frame: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
     assert!(
         result["screen"].as_str().unwrap_or("").contains("READY 2>"),
         "Expected the final streamed screen state before returning: {result}"
@@ -665,22 +674,18 @@ async fn send_and_wait_screen_mode_press_enter_waits_for_streamed_screen_update(
 async fn send_and_wait_delta_mode_ignores_preexisting_unread_output() {
     let (mgr, session, id) = create_stale_output_session().await;
 
-    let result = handle_send_and_wait(
-        &session,
-        "launch",
-        true,
-        None,
-        2000,
-        "delta",
-    )
-    .await
-    .unwrap();
+    let result = handle_send_and_wait(&session, "launch", true, None, 2000, "delta")
+        .await
+        .unwrap();
 
     assert_eq!(
         result["timed_out"], false,
         "send_and_wait should wait for fresh post-input output instead of returning on unread startup delta: {result}"
     );
-    assert_eq!(result["matched"], true, "Expected send_and_wait to complete: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Expected send_and_wait to complete: {result}"
+    );
 
     let output = result["output"].as_str().unwrap_or("");
     assert!(
@@ -715,14 +720,17 @@ async fn wait_for_pattern_appears() {
         &session,
         Some("waitfor_marker_123"),
         None,
-        5000, // timeout
+        5000,  // timeout
         false, // on_screen = false (check raw output)
         false, // invert = false
     )
     .await
     .unwrap();
 
-    assert_eq!(result["matched"], true, "Pattern should be matched: {result}");
+    assert_eq!(
+        result["matched"], true,
+        "Pattern should be matched: {result}"
+    );
     assert_eq!(result["timed_out"], false);
     let mt = result["match_text"].as_str().unwrap_or("");
     assert!(mt.contains("waitfor_marker_123"));
@@ -795,8 +803,7 @@ async fn wait_for_idle_after_command() {
     sleep(Duration::from_millis(500)).await;
 
     let result = handle_wait_for_idle(
-        &session,
-        500,  // stable_ms — 500ms of no output
+        &session, 500,  // stable_ms — 500ms of no output
         5000, // timeout_ms
         false,
     )
@@ -850,8 +857,7 @@ async fn wait_for_idle_timeout() {
     // Immediately try to detect idle with a very short timeout and long stable window.
     // The stable_ms is longer than the timeout, so it should always time out.
     let result = handle_wait_for_idle(
-        &session,
-        5000, // stable_ms — need 5s of quiet
+        &session, 5000, // stable_ms — need 5s of quiet
         100,  // timeout_ms — but only wait 100ms total
         false,
     )
@@ -996,7 +1002,9 @@ async fn error_detection_clean_output() {
     // exit code 0 should not trigger
     let matches = detector.detect_errors("exit code 0");
     assert!(
-        !matches.iter().any(|m| m.pattern_name == "exit code nonzero"),
+        !matches
+            .iter()
+            .any(|m| m.pattern_name == "exit code nonzero"),
         "exit code 0 should not match"
     );
 }
@@ -1022,12 +1030,18 @@ async fn error_detection_scoring() {
         score_with_exit > score_no_exit,
         "Exit code should increase score: {score_with_exit} vs {score_no_exit}"
     );
-    assert!(score_with_exit > 30, "Combined score should be >30, got {score_with_exit}");
+    assert!(
+        score_with_exit > 30,
+        "Combined score should be >30, got {score_with_exit}"
+    );
 
     // Diverse patterns → high score
     let text = "error[E0308]: mismatch\nnpm ERR! failed\nTraceback (most recent call last):";
     let score = detector.error_score(text, Some(0));
-    assert!(score > 20, "Diverse patterns should produce high score, got {score}");
+    assert!(
+        score > 20,
+        "Diverse patterns should produce high score, got {score}"
+    );
 
     // Score capped at 100
     let text = (0..50)

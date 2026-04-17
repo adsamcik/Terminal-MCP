@@ -26,10 +26,26 @@ fn key_to_bytes_inner(key: &str, application_cursor: bool, depth: usize) -> Opti
         "Space" => Some(vec![0x20]),
 
         // -- Arrow keys (mode-dependent) --
-        "Up" => Some(if application_cursor { b"\x1bOA".to_vec() } else { b"\x1b[A".to_vec() }),
-        "Down" => Some(if application_cursor { b"\x1bOB".to_vec() } else { b"\x1b[B".to_vec() }),
-        "Right" => Some(if application_cursor { b"\x1bOC".to_vec() } else { b"\x1b[C".to_vec() }),
-        "Left" => Some(if application_cursor { b"\x1bOD".to_vec() } else { b"\x1b[D".to_vec() }),
+        "Up" => Some(if application_cursor {
+            b"\x1bOA".to_vec()
+        } else {
+            b"\x1b[A".to_vec()
+        }),
+        "Down" => Some(if application_cursor {
+            b"\x1bOB".to_vec()
+        } else {
+            b"\x1b[B".to_vec()
+        }),
+        "Right" => Some(if application_cursor {
+            b"\x1bOC".to_vec()
+        } else {
+            b"\x1b[C".to_vec()
+        }),
+        "Left" => Some(if application_cursor {
+            b"\x1bOD".to_vec()
+        } else {
+            b"\x1b[D".to_vec()
+        }),
 
         // -- Navigation --
         "Home" => Some(b"\x1b[H".to_vec()),
@@ -221,9 +237,18 @@ mod tests {
     #[test]
     fn all_function_keys_f1_to_f12() {
         let expected: Vec<(&str, &[u8])> = vec![
-            ("F1", b"\x1bOP"), ("F2", b"\x1bOQ"), ("F3", b"\x1bOR"), ("F4", b"\x1bOS"),
-            ("F5", b"\x1b[15~"), ("F6", b"\x1b[17~"), ("F7", b"\x1b[18~"), ("F8", b"\x1b[19~"),
-            ("F9", b"\x1b[20~"), ("F10", b"\x1b[21~"), ("F11", b"\x1b[23~"), ("F12", b"\x1b[24~"),
+            ("F1", b"\x1bOP"),
+            ("F2", b"\x1bOQ"),
+            ("F3", b"\x1bOR"),
+            ("F4", b"\x1bOS"),
+            ("F5", b"\x1b[15~"),
+            ("F6", b"\x1b[17~"),
+            ("F7", b"\x1b[18~"),
+            ("F8", b"\x1b[19~"),
+            ("F9", b"\x1b[20~"),
+            ("F10", b"\x1b[21~"),
+            ("F11", b"\x1b[23~"),
+            ("F12", b"\x1b[24~"),
         ];
         for (name, bytes) in expected {
             assert_eq!(
@@ -239,7 +264,11 @@ mod tests {
         for (i, ch) in ('A'..='Z').enumerate() {
             let key = format!("Ctrl+{ch}");
             let expected = vec![(i as u8) + 1];
-            assert_eq!(key_to_bytes(&key, false), Some(expected), "Failed for {key}");
+            assert_eq!(
+                key_to_bytes(&key, false),
+                Some(expected),
+                "Failed for {key}"
+            );
         }
     }
 
@@ -266,9 +295,15 @@ mod tests {
         // Alt+Escape = ESC + ESC
         assert_eq!(key_to_bytes("Alt+Escape", false), Some(vec![0x1b, 0x1b]));
         // Alt+Up (normal mode) = ESC + CSI A
-        assert_eq!(key_to_bytes("Alt+Up", false), Some(vec![0x1b, 0x1b, b'[', b'A']));
+        assert_eq!(
+            key_to_bytes("Alt+Up", false),
+            Some(vec![0x1b, 0x1b, b'[', b'A'])
+        );
         // Alt+Up (app cursor) = ESC + SS3 A
-        assert_eq!(key_to_bytes("Alt+Up", true), Some(vec![0x1b, 0x1b, b'O', b'A']));
+        assert_eq!(
+            key_to_bytes("Alt+Up", true),
+            Some(vec![0x1b, 0x1b, b'O', b'A'])
+        );
     }
 
     #[test]

@@ -85,11 +85,7 @@ fn decode_wsl_output(bytes: &[u8]) -> String {
 ///   when `None`.
 /// * `cwd` – Working directory inside the WSL filesystem (Linux path such as
 ///   `"/home/user"`). WSL handles this via `--cd`.
-pub fn wsl_config(
-    distro: Option<&str>,
-    command: Option<&str>,
-    cwd: Option<&str>,
-) -> PtyConfig {
+pub fn wsl_config(distro: Option<&str>, command: Option<&str>, cwd: Option<&str>) -> PtyConfig {
     let mut args = Vec::new();
 
     if let Some(d) = distro {

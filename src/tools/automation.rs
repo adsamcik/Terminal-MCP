@@ -44,7 +44,10 @@ fn append_capped_tail(buf: &mut Vec<u8>, chunk: &[u8], max_bytes: usize) {
         return;
     }
 
-    let overflow = buf.len().saturating_add(chunk.len()).saturating_sub(max_bytes);
+    let overflow = buf
+        .len()
+        .saturating_add(chunk.len())
+        .saturating_sub(max_bytes);
     if overflow > 0 {
         buf.drain(..overflow);
     }
@@ -52,7 +55,10 @@ fn append_capped_tail(buf: &mut Vec<u8>, chunk: &[u8], max_bytes: usize) {
 }
 
 fn normalize_wait_text(text: &str) -> String {
-    strip_ansi(text).replace(['\r', '\n'], "").trim().to_string()
+    strip_ansi(text)
+        .replace(['\r', '\n'], "")
+        .trim()
+        .to_string()
 }
 
 fn looks_like_only_echo(output: &str, input: &str) -> bool {
@@ -61,13 +67,10 @@ fn looks_like_only_echo(output: &str, input: &str) -> bool {
 }
 
 fn last_nonempty_screen_line(screen: &str) -> Option<String> {
-    screen
-        .lines()
-        .rev()
-        .find_map(|line| {
-            let trimmed = line.trim_end();
-            (!trimmed.is_empty()).then_some(trimmed.to_string())
-        })
+    screen.lines().rev().find_map(|line| {
+        let trimmed = line.trim_end();
+        (!trimmed.is_empty()).then_some(trimmed.to_string())
+    })
 }
 
 fn screen_change_looks_like_command_echo(previous: &str, current: &str, input: &str) -> bool {
@@ -128,10 +131,11 @@ pub async fn handle_send_and_wait(
         .map(|p| RegexBuilder::new(p).size_limit(1_000_000).build())
         .transpose()
         .context("Invalid wait_for regex")?;
-    let prefer_screen_stable_wait =
-        pattern.is_none() && matches!(output_mode, "screen" | "both");
-    let use_prompt_ready_wait =
-        pattern.is_none() && output_mode == "delta" && press_enter && session.is_likely_interactive_shell();
+    let prefer_screen_stable_wait = pattern.is_none() && matches!(output_mode, "screen" | "both");
+    let use_prompt_ready_wait = pattern.is_none()
+        && output_mode == "delta"
+        && press_enter
+        && session.is_likely_interactive_shell();
     let screen_stable_ms = if prefer_screen_stable_wait && press_enter {
         SEND_AND_WAIT_SCREEN_COMMAND_STABLE_MS
     } else {
@@ -142,7 +146,8 @@ pub async fn handle_send_and_wait(
     let mut last_screen = None;
     let mut last_screen_change = Instant::now();
     if prefer_screen_stable_wait {
-        let (screen, baseline_captured_at) = capture_screen_baseline(session.get_screen_contents()).await;
+        let (screen, baseline_captured_at) =
+            capture_screen_baseline(session.get_screen_contents()).await;
         last_screen = Some(screen);
         last_screen_change = baseline_captured_at;
     }
@@ -176,7 +181,11 @@ pub async fn handle_send_and_wait(
             // Accumulate delta output for pattern match (avoids cloning entire log)
             let new_output = session.read_new_output_chunk().await;
             dropped_bytes = dropped_bytes.saturating_add(new_output.dropped_bytes);
-            append_capped_tail(&mut accumulated_output, &new_output.bytes, MAX_MATCH_BUFFER_BYTES);
+            append_capped_tail(
+                &mut accumulated_output,
+                &new_output.bytes,
+                MAX_MATCH_BUFFER_BYTES,
+            );
             let output_text = String::from_utf8_lossy(&accumulated_output);
             if let Some(m) = pat.find(&output_text) {
                 matched = true;
@@ -193,7 +202,11 @@ pub async fn handle_send_and_wait(
         } else {
             let new_output = session.read_new_output_chunk().await;
             dropped_bytes = dropped_bytes.saturating_add(new_output.dropped_bytes);
-            append_capped_tail(&mut accumulated_output, &new_output.bytes, MAX_MATCH_BUFFER_BYTES);
+            append_capped_tail(
+                &mut accumulated_output,
+                &new_output.bytes,
+                MAX_MATCH_BUFFER_BYTES,
+            );
             if !observed_non_echo_output
                 && !looks_like_only_echo(&String::from_utf8_lossy(&accumulated_output), input)
             {
@@ -208,17 +221,14 @@ pub async fn handle_send_and_wait(
                             && !screen_changed
                             && screen_change_looks_like_command_echo(last, &current_screen, input);
                         last_screen = Some(current_screen);
-                        if !require_meaningful_screen_change
-                            || screen_changed
-                            || !echo_only_change
+                        if !require_meaningful_screen_change || screen_changed || !echo_only_change
                         {
                             last_screen_change = Instant::now();
                             screen_changed = true;
                         }
                     } else if screen_changed
                         && observed_non_echo_output
-                        && last_screen_change.elapsed()
-                            >= Duration::from_millis(screen_stable_ms)
+                        && last_screen_change.elapsed() >= Duration::from_millis(screen_stable_ms)
                     {
                         matched = true;
                         break;
@@ -266,7 +276,11 @@ pub async fn handle_send_and_wait(
     // Grab any remaining output after the settle delay
     let remaining = session.read_new_output_chunk().await;
     dropped_bytes = dropped_bytes.saturating_add(remaining.dropped_bytes);
-    append_capped_tail(&mut accumulated_output, &remaining.bytes, MAX_MATCH_BUFFER_BYTES);
+    append_capped_tail(
+        &mut accumulated_output,
+        &remaining.bytes,
+        MAX_MATCH_BUFFER_BYTES,
+    );
 
     // 3. Collect output based on mode
     let delta_output = String::from_utf8_lossy(&accumulated_output).to_string();
@@ -366,7 +380,11 @@ pub async fn handle_wait_for(
                 // Accumulate delta output (avoids cloning entire log)
                 let new_output = session.read_new_output_chunk().await;
                 dropped_bytes = dropped_bytes.saturating_add(new_output.dropped_bytes);
-                append_capped_tail(&mut accumulated_output, &new_output.bytes, MAX_MATCH_BUFFER_BYTES);
+                append_capped_tail(
+                    &mut accumulated_output,
+                    &new_output.bytes,
+                    MAX_MATCH_BUFFER_BYTES,
+                );
                 String::from_utf8_lossy(&accumulated_output).to_string()
             };
 
@@ -414,8 +432,8 @@ pub async fn handle_wait_for(
             let new_output = session.read_new_output_chunk().await;
             dropped_bytes = dropped_bytes.saturating_add(new_output.dropped_bytes);
             let text = String::from_utf8_lossy(&new_output.bytes);
-            lines_received = lines_received
-                .saturating_add(text.chars().filter(|&c| c == '\n').count() as u32);
+            lines_received =
+                lines_received.saturating_add(text.chars().filter(|&c| c == '\n').count() as u32);
             if lines_received >= target {
                 break;
             }
@@ -497,10 +515,7 @@ pub async fn handle_wait_for_idle(
 }
 
 /// Wait for the child process to exit and return its exit code.
-pub async fn handle_wait_for_exit(
-    session: &Session,
-    timeout_ms: u64,
-) -> Result<serde_json::Value> {
+pub async fn handle_wait_for_exit(session: &Session, timeout_ms: u64) -> Result<serde_json::Value> {
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
 
     loop {

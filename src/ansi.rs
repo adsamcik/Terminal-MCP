@@ -6,8 +6,8 @@ use regex::Regex;
 static ANSI_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"\x1b\[[0-9;?]*[ -/]*[@-~]", // CSI sequences
-        r"|\x1b\].*?(?:\x1b\\|\x07)",  // OSC sequences (terminated by ST or BEL)
-        r"|\x1b[()][A-Z0-9]",          // charset selection (e.g. ESC ( B)
+        r"|\x1b\].*?(?:\x1b\\|\x07)", // OSC sequences (terminated by ST or BEL)
+        r"|\x1b[()][A-Z0-9]",         // charset selection (e.g. ESC ( B)
         r"|\x1b[A-Z@-_]",             // two-byte sequences (e.g. ESC M)
     ))
     .expect("ANSI regex is valid")

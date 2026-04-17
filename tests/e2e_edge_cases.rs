@@ -139,7 +139,10 @@ async fn test_concurrent_writes() {
 
     sleep(Duration::from_secs(1)).await;
     let raw = session.get_full_output().await;
-    assert!(!raw.is_empty(), "Output should be non-empty after concurrent writes");
+    assert!(
+        !raw.is_empty(),
+        "Output should be non-empty after concurrent writes"
+    );
 
     drop(session);
     mgr.close_session(&info.session_id).await.unwrap();
@@ -152,7 +155,10 @@ async fn test_concurrent_reads() {
     let session = mgr.get_session(&info.session_id).unwrap();
 
     sleep(Duration::from_secs(2)).await;
-    session.write_bytes(b"echo concurrent_read_test\r\n").await.unwrap();
+    session
+        .write_bytes(b"echo concurrent_read_test\r\n")
+        .await
+        .unwrap();
     sleep(Duration::from_secs(1)).await;
 
     let mut handles = Vec::new();
@@ -203,13 +209,10 @@ async fn test_write_while_reading() {
     });
 
     // Both tasks complete without deadlock — use a timeout as safety net
-    let result = tokio::time::timeout(
-        Duration::from_secs(15),
-        async {
-            write_handle.await.expect("Writer should not panic");
-            read_handle.await.expect("Reader should not panic");
-        },
-    )
+    let result = tokio::time::timeout(Duration::from_secs(15), async {
+        write_handle.await.expect("Writer should not panic");
+        read_handle.await.expect("Reader should not panic");
+    })
     .await;
     assert!(result.is_ok(), "Write-while-reading should not deadlock");
 
@@ -264,7 +267,10 @@ async fn test_read_from_exited_process() {
     let _new = session.read_new_output().await;
 
     // The short-lived cmd /c echo done should have produced some output
-    assert!(!output.is_empty(), "Even exited process should have produced output");
+    assert!(
+        !output.is_empty(),
+        "Even exited process should have produced output"
+    );
 
     drop(session);
     mgr.close_session(&info.session_id).await.unwrap();
@@ -326,7 +332,10 @@ async fn test_multiple_get_session_calls() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_idle_cleanup() {
     let mgr = SessionManager::new();
-    let info = mgr.create_session_async(cmd_config_quiet_wait()).await.unwrap();
+    let info = mgr
+        .create_session_async(cmd_config_quiet_wait())
+        .await
+        .unwrap();
     assert_eq!(mgr.len(), 1);
 
     let session = mgr.get_session(&info.session_id).unwrap();
@@ -336,10 +345,8 @@ async fn test_idle_cleanup() {
 
     assert!(session.is_idle(Duration::from_secs(1)).await);
 
-    let cleanup = mgr.start_cleanup_task_with_interval(
-        Duration::from_secs(1),
-        Duration::from_millis(200),
-    );
+    let cleanup =
+        mgr.start_cleanup_task_with_interval(Duration::from_secs(1), Duration::from_millis(200));
 
     let mut removed = false;
     for _ in 0..15 {
@@ -349,7 +356,10 @@ async fn test_idle_cleanup() {
         }
         sleep(Duration::from_millis(200)).await;
     }
-    assert!(removed, "Idle cleanup should remove the session from the manager");
+    assert!(
+        removed,
+        "Idle cleanup should remove the session from the manager"
+    );
 
     let mut alive = session.is_alive().await;
     for _ in 0..10 {
@@ -415,7 +425,10 @@ async fn test_large_input() {
     drop(result);
 
     sleep(Duration::from_secs(1)).await;
-    assert!(session.is_alive().await, "Session should survive large input");
+    assert!(
+        session.is_alive().await,
+        "Session should survive large input"
+    );
 
     drop(session);
     mgr.close_session(&info.session_id).await.unwrap();
@@ -444,7 +457,10 @@ async fn test_search_with_invalid_regex() {
 
     // Also test scrollback_search with invalid regex
     let result2 = session.scrollback_search("[invalid", 0).await;
-    assert!(result2.is_err(), "Invalid regex in scrollback should return Err");
+    assert!(
+        result2.is_err(),
+        "Invalid regex in scrollback should return Err"
+    );
 
     drop(session);
     mgr.close_session(&info.session_id).await.unwrap();
@@ -462,7 +478,11 @@ async fn test_empty_search() {
 
     // Empty regex pattern matches everything — should not panic
     let result = session.search_output("").await;
-    assert!(result.is_ok(), "Empty search should not error: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Empty search should not error: {:?}",
+        result.err()
+    );
 
     let result2 = session.scrollback_search("", 0).await;
     assert!(result2.is_ok(), "Empty scrollback search should not error");
@@ -483,7 +503,11 @@ async fn test_scrollback_tail_zero() {
 
     // Tail with 0 lines should return empty
     let result = session.scrollback_tail(0).await;
-    assert!(result.is_empty(), "tail(0) should return empty, got {} lines", result.len());
+    assert!(
+        result.is_empty(),
+        "tail(0) should return empty, got {} lines",
+        result.len()
+    );
 
     // Tail with normal count should work
     let result = session.scrollback_tail(5).await;

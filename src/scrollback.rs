@@ -97,11 +97,7 @@ impl ScrollbackBuffer {
     }
 
     /// Search for a regex pattern, returning matching lines with context.
-    pub fn search(
-        &self,
-        pattern: &str,
-        context_lines: usize,
-    ) -> Result<Vec<SearchMatch>> {
+    pub fn search(&self, pattern: &str, context_lines: usize) -> Result<Vec<SearchMatch>> {
         let re = RegexBuilder::new(pattern)
             .size_limit(1_000_000)
             .build()
@@ -114,9 +110,8 @@ impl ScrollbackBuffer {
                 let ctx_start = i.saturating_sub(context_lines);
                 let ctx_end = (i + context_lines + 1).min(total);
 
-                let context_before: Vec<String> = (ctx_start..i)
-                    .map(|j| self.lines[j].text.clone())
-                    .collect();
+                let context_before: Vec<String> =
+                    (ctx_start..i).map(|j| self.lines[j].text.clone()).collect();
                 let context_after: Vec<String> = ((i + 1)..ctx_end)
                     .map(|j| self.lines[j].text.clone())
                     .collect();
@@ -288,7 +283,10 @@ mod tests {
         }
         assert_eq!(buf.len(), 5);
         // Should contain the last 5 lines
-        assert_eq!(buf.tail(5), vec!["line15", "line16", "line17", "line18", "line19"]);
+        assert_eq!(
+            buf.tail(5),
+            vec!["line15", "line16", "line17", "line18", "line19"]
+        );
     }
 
     #[test]

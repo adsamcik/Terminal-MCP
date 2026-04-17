@@ -45,7 +45,10 @@ async fn create_session_default_shell() {
     let info = mgr.create_session_async(default_config()).await.unwrap();
 
     assert!(!info.session_id.is_empty(), "session_id must not be empty");
-    assert!(info.pid.is_some(), "pid should be present for a running session");
+    assert!(
+        info.pid.is_some(),
+        "pid should be present for a running session"
+    );
     assert_eq!(info.rows, 24);
     assert_eq!(info.cols, 80);
 
@@ -152,10 +155,7 @@ async fn create_session_custom_env() {
 
     sleep(Duration::from_secs(2)).await;
 
-    session
-        .write_bytes(b"echo %MY_TEST_VAR%\r")
-        .await
-        .unwrap();
+    session.write_bytes(b"echo %MY_TEST_VAR%\r").await.unwrap();
     sleep(Duration::from_secs(2)).await;
 
     let raw = session.get_full_output().await;
@@ -264,7 +264,10 @@ async fn close_session_nonexistent() {
 async fn list_sessions_empty() {
     let mgr = SessionManager::new();
     let list = mgr.list_sessions().await;
-    assert!(list.is_empty(), "List should be empty when no sessions exist");
+    assert!(
+        list.is_empty(),
+        "List should be empty when no sessions exist"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -446,5 +449,8 @@ async fn rapid_create_close() {
 
     // Also verify list is empty
     let list = mgr.list_sessions().await;
-    assert!(list.is_empty(), "List should be empty after all sessions closed");
+    assert!(
+        list.is_empty(),
+        "List should be empty after all sessions closed"
+    );
 }

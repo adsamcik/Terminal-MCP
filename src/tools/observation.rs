@@ -313,7 +313,10 @@ fn build_glyph_styles(
         );
     }
 
-    while style_rows.last().is_some_and(|row: &Vec<Option<u16>>| row.is_empty()) {
+    while style_rows
+        .last()
+        .is_some_and(|row: &Vec<Option<u16>>| row.is_empty())
+    {
         style_rows.pop();
     }
 
@@ -346,7 +349,7 @@ fn conpty_alternate_screen_note() -> Option<String> {
 /// Build a [`GetScreenResponse`] from the current parser state.
 ///
 /// * `include_cursor` — insert a `▏` marker at the visible cursor position.
-    /// * `include_colors` — attach color-span, highlight, and per-glyph style arrays.
+/// * `include_colors` — attach color-span, highlight, and per-glyph style arrays.
 /// * `region` — if `Some`, read only a sub-rectangle of the screen.
 /// * `diff_mode` — if `true`, include only changed row indices and take a
 ///   snapshot for the next diff comparison.
@@ -371,10 +374,8 @@ pub fn get_screen(
 
     // Color spans / highlights
     let (color_spans, highlights, glyph_styles) = if include_colors {
-        let spans: Vec<SerializedColorSpan> =
-            vt.color_spans().iter().map(serialize_span).collect();
-        let hi: Vec<SerializedColorSpan> =
-            vt.highlights().iter().map(serialize_span).collect();
+        let spans: Vec<SerializedColorSpan> = vt.color_spans().iter().map(serialize_span).collect();
+        let hi: Vec<SerializedColorSpan> = vt.highlights().iter().map(serialize_span).collect();
         let glyph_styles = build_glyph_styles(vt, include_cursor, region);
         (
             Some(spans),
@@ -400,7 +401,11 @@ pub fn get_screen(
         vt.take_snapshot();
         (
             Some(row_indices),
-            if changed.is_empty() { None } else { Some(changed) },
+            if changed.is_empty() {
+                None
+            } else {
+                Some(changed)
+            },
         )
     } else {
         (None, None)
@@ -500,11 +505,7 @@ pub async fn handle_read_output(
     // Cursor position.
     let (row, col) = session.cursor_position().await;
     let visible = session.cursor_visible().await;
-    let cursor = CursorPosition {
-        row,
-        col,
-        visible,
-    };
+    let cursor = CursorPosition { row, col, visible };
 
     let exit_code = session.cached_exit_code().await;
 
@@ -523,12 +524,7 @@ pub async fn handle_read_output(
 // ── Stub tools ─────────────────────────────────────────────────────
 
 /// Render a PNG screenshot of the terminal via fontdue + tiny-skia.
-pub fn screenshot(
-    vt: &VtParser,
-    theme: &str,
-    font_size: u32,
-    scale: f32,
-) -> Result<Vec<u8>> {
+pub fn screenshot(vt: &VtParser, theme: &str, font_size: u32, scale: f32) -> Result<Vec<u8>> {
     crate::screenshot::render_screenshot(vt.screen(), theme, font_size, scale)
 }
 
@@ -626,10 +622,7 @@ mod tests {
     #[test]
     fn color_spans_serialization() {
         assert_eq!(serialize_color(&Color::Default), None);
-        assert_eq!(
-            serialize_color(&Color::Indexed(1)),
-            Some("red".to_string())
-        );
+        assert_eq!(serialize_color(&Color::Indexed(1)), Some("red".to_string()));
         assert_eq!(
             serialize_color(&Color::Indexed(9)),
             Some("bright_red".to_string())
@@ -708,7 +701,6 @@ mod tests {
         assert!(content[0].previous.starts_with("original"));
     }
 
-
     #[test]
     fn color_serialization_all_ansi_colors() {
         for i in 0u8..8 {
@@ -730,14 +722,26 @@ mod tests {
     #[test]
     fn color_serialization_indexed_above_16() {
         assert_eq!(serialize_color(&Color::Indexed(16)), Some("idx:16".into()));
-        assert_eq!(serialize_color(&Color::Indexed(255)), Some("idx:255".into()));
+        assert_eq!(
+            serialize_color(&Color::Indexed(255)),
+            Some("idx:255".into())
+        );
     }
 
     #[test]
     fn color_serialization_rgb() {
-        assert_eq!(serialize_color(&Color::Rgb(0, 0, 0)), Some("#000000".into()));
-        assert_eq!(serialize_color(&Color::Rgb(255, 255, 255)), Some("#ffffff".into()));
-        assert_eq!(serialize_color(&Color::Rgb(171, 205, 239)), Some("#abcdef".into()));
+        assert_eq!(
+            serialize_color(&Color::Rgb(0, 0, 0)),
+            Some("#000000".into())
+        );
+        assert_eq!(
+            serialize_color(&Color::Rgb(255, 255, 255)),
+            Some("#ffffff".into())
+        );
+        assert_eq!(
+            serialize_color(&Color::Rgb(171, 205, 239)),
+            Some("#abcdef".into())
+        );
     }
 
     #[test]
@@ -809,7 +813,12 @@ mod tests {
     fn get_screen_with_region() {
         let mut vt = make_parser(5, 10);
         vt.process(b"ABCDEFGHIJ\r\nklmnopqrst");
-        let region = ScreenRegion { top: 0, left: 0, bottom: 0, right: 2 };
+        let region = ScreenRegion {
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 2,
+        };
         let resp = get_screen(&mut vt, false, false, Some(region), false);
         assert_eq!(resp.screen, "ABC");
     }
@@ -825,7 +834,11 @@ mod tests {
     #[test]
     fn get_screen_title() {
         let mut vt = make_parser(5, 20);
-        assert!(get_screen(&mut vt, false, false, None, false).title.is_none());
+        assert!(
+            get_screen(&mut vt, false, false, None, false)
+                .title
+                .is_none()
+        );
         vt.process(b"\x1b]2;Test Title\x1b\\");
         assert_eq!(
             get_screen(&mut vt, false, false, None, false).title,
@@ -883,6 +896,9 @@ mod tests {
         let glyph_styles = resp.glyph_styles.expect("should have glyph styles");
 
         assert_eq!(resp.screen, "abc▏");
-        assert_eq!(glyph_styles.rows, vec![vec![Some(0), Some(0), Some(0), None]]);
+        assert_eq!(
+            glyph_styles.rows,
+            vec![vec![Some(0), Some(0), Some(0), None]]
+        );
     }
 }

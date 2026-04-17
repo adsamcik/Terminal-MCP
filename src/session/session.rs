@@ -459,7 +459,10 @@ impl Session {
     /// Get a range of lines from the scrollback buffer.
     pub async fn scrollback_range(&self, start: usize, count: usize) -> Vec<String> {
         let sb = self.scrollback_buf.lock().await;
-        sb.range(start, count).into_iter().map(String::from).collect()
+        sb.range(start, count)
+            .into_iter()
+            .map(String::from)
+            .collect()
     }
 
     /// Search the scrollback buffer with a regex pattern.
@@ -600,9 +603,7 @@ impl Session {
 
         match executable.as_str() {
             "cmd" => !has_any_flag(&["/c", "/r"]),
-            "powershell" | "pwsh" => {
-                !has_any_flag(&["-command", "-c", "-file", "-encodedcommand"])
-            }
+            "powershell" | "pwsh" => !has_any_flag(&["-command", "-c", "-file", "-encodedcommand"]),
             "bash" | "sh" | "zsh" | "fish" => !has_any_flag(&["-c", "-lc"]),
             _ => false,
         }
@@ -722,7 +723,7 @@ impl Drop for Session {
 
 #[cfg(test)]
 mod tests {
-    use super::{RetainedOutput, MAX_OUTPUT_LOG_BYTES};
+    use super::{MAX_OUTPUT_LOG_BYTES, RetainedOutput};
 
     #[test]
     fn retained_output_reads_new_bytes_without_loss() {

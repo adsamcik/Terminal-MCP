@@ -548,9 +548,7 @@ impl VtParser {
             for row_idx in 0..to_read {
                 let mut line = String::new();
                 for col in 0..cols {
-                    if let Some(cell) =
-                        self.parser.screen().cell(row_idx as u16, col)
-                    {
+                    if let Some(cell) = self.parser.screen().cell(row_idx as u16, col) {
                         if cell.is_wide_continuation() {
                             continue;
                         }
@@ -780,7 +778,10 @@ mod tests {
         vt.process(b"\x1b[1mBOLD\x1b[0m");
         let spans = vt.color_spans();
         assert!(!spans.is_empty());
-        let bold_span = spans.iter().find(|s| s.bold).expect("should have bold span");
+        let bold_span = spans
+            .iter()
+            .find(|s| s.bold)
+            .expect("should have bold span");
         assert_eq!(bold_span.row, 0);
         assert_eq!(bold_span.col, 0);
         assert_eq!(bold_span.len, 4);
@@ -1011,10 +1012,25 @@ mod tests {
 
     #[test]
     fn mouse_mode_conversions() {
-        assert_eq!(MouseMode::from(vt100::MouseProtocolMode::None), MouseMode::None);
-        assert_eq!(MouseMode::from(vt100::MouseProtocolMode::Press), MouseMode::Press);
-        assert_eq!(MouseMode::from(vt100::MouseProtocolMode::PressRelease), MouseMode::PressRelease);
-        assert_eq!(MouseMode::from(vt100::MouseProtocolMode::ButtonMotion), MouseMode::ButtonMotion);
-        assert_eq!(MouseMode::from(vt100::MouseProtocolMode::AnyMotion), MouseMode::AnyMotion);
+        assert_eq!(
+            MouseMode::from(vt100::MouseProtocolMode::None),
+            MouseMode::None
+        );
+        assert_eq!(
+            MouseMode::from(vt100::MouseProtocolMode::Press),
+            MouseMode::Press
+        );
+        assert_eq!(
+            MouseMode::from(vt100::MouseProtocolMode::PressRelease),
+            MouseMode::PressRelease
+        );
+        assert_eq!(
+            MouseMode::from(vt100::MouseProtocolMode::ButtonMotion),
+            MouseMode::ButtonMotion
+        );
+        assert_eq!(
+            MouseMode::from(vt100::MouseProtocolMode::AnyMotion),
+            MouseMode::AnyMotion
+        );
     }
 }

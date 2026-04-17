@@ -4,16 +4,13 @@ use std::sync::Arc;
 use anyhow::Result;
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler, ServiceExt,
-    handler::server::{
-        router::tool::ToolRouter,
-        wrapper::Parameters,
-    },
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
-        CallToolResult, Content, Implementation, InitializeResult,
-        ServerCapabilities, ServerInfo,
+        CallToolResult, Content, Implementation, InitializeResult, ServerCapabilities, ServerInfo,
     },
-    schemars, tool, tool_handler, tool_router,
+    schemars,
     service::RequestContext,
+    tool, tool_handler, tool_router,
     transport::io::stdio,
 };
 use serde::Deserialize;
@@ -65,14 +62,14 @@ pub struct SendTextParams {
     pub text: String,
     #[schemars(description = "If true, press Enter after typing the text (default: false)")]
     pub press_enter: Option<bool>,
-    #[schemars(description = "Additional delay in milliseconds between typed characters. If omitted, send_text applies its built-in pacing for normal text entry and only needs this field for slower timing-sensitive sequences.")]
+    #[schemars(
+        description = "Additional delay in milliseconds between typed characters. If omitted, send_text applies its built-in pacing for normal text entry and only needs this field for slower timing-sensitive sequences."
+    )]
     pub delay_between_ms: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[schemars(
-    description = "Send named keystrokes to a terminal session (e.g. Ctrl+C, Up, Tab)"
-)]
+#[schemars(description = "Send named keystrokes to a terminal session (e.g. Ctrl+C, Up, Tab)")]
 pub struct SendKeysParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
@@ -145,24 +142,28 @@ pub struct ScreenshotParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[schemars(description = "Read scrollback buffer content that has scrolled above the visible screen")]
+#[schemars(
+    description = "Read scrollback buffer content that has scrolled above the visible screen"
+)]
 pub struct GetScrollbackParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
-    #[schemars(
-        description = "Number of lines to return. Negative = from bottom. (default: 100)"
-    )]
+    #[schemars(description = "Number of lines to return. Negative = from bottom. (default: 100)")]
     pub lines: Option<i32>,
     #[schemars(description = "Optional text or regex to search for in scrollback")]
     pub search: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[schemars(description = "Wait for a pattern to appear in terminal output, or for a target number of new lines")]
+#[schemars(
+    description = "Wait for a pattern to appear in terminal output, or for a target number of new lines"
+)]
 pub struct WaitForParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
-    #[schemars(description = "Text or regex pattern to wait for. Optional if line_count is provided")]
+    #[schemars(
+        description = "Text or regex pattern to wait for. Optional if line_count is provided"
+    )]
     pub pattern: Option<String>,
     #[schemars(
         description = "Wait until this many new lines of output appear. Alternative to pattern matching."
@@ -179,7 +180,9 @@ pub struct WaitForParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[schemars(description = "Wait for the terminal to become idle based on output silence or screen stability")]
+#[schemars(
+    description = "Wait for the terminal to become idle based on output silence or screen stability"
+)]
 pub struct WaitForIdleParams {
     #[schemars(description = "Target session identifier")]
     pub session_id: String,
@@ -293,7 +296,9 @@ impl TerminalMcpServer {
 
     /// Create a new interactive terminal session with a PTY.
     /// Spawns a shell or specified command.
-    #[tool(description = "Create a new interactive terminal session with a PTY. Spawns a shell or specified command.")]
+    #[tool(
+        description = "Create a new interactive terminal session with a PTY. Spawns a shell or specified command."
+    )]
     async fn create_session(
         &self,
         context: RequestContext<RoleServer>,
@@ -312,7 +317,9 @@ impl TerminalMcpServer {
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("create_session error: {e:#}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "create_session error: {e:#}"
+            ))])),
         }
     }
 
@@ -336,7 +343,9 @@ impl TerminalMcpServer {
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("close_session error: {e:#}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "close_session error: {e:#}"
+            ))])),
         }
     }
 
@@ -359,13 +368,17 @@ impl TerminalMcpServer {
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("list_sessions error: {e:#}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "list_sessions error: {e:#}"
+            ))])),
         }
     }
 
     /// Type text into a terminal session. Characters are sent as-is.
     /// For control keys or navigation, use send_keys instead.
-    #[tool(description = "Type text into a terminal session. Characters are sent as-is. For control keys, navigation, or function keys, use send_keys instead. Optionally press Enter after the text.")]
+    #[tool(
+        description = "Type text into a terminal session. Characters are sent as-is. For control keys, navigation, or function keys, use send_keys instead. Optionally press Enter after the text."
+    )]
     async fn send_text(
         &self,
         context: RequestContext<RoleServer>,
@@ -373,19 +386,30 @@ impl TerminalMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let session = self.visible_session(&params.0.session_id, &context)?;
         let press_enter = params.0.press_enter.unwrap_or(false);
-        match crate::tools::input::handle_send_text(&session, &params.0.text, press_enter, params.0.delay_between_ms).await {
+        match crate::tools::input::handle_send_text(
+            &session,
+            &params.0.text,
+            press_enter,
+            params.0.delay_between_ms,
+        )
+        .await
+        {
             Ok(value) => {
                 let json = serde_json::to_string_pretty(&value)
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("send_text error: {e:#}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "send_text error: {e:#}"
+            ))])),
         }
     }
 
     /// Send named keystrokes to a terminal session.
     /// Use for control keys (Ctrl+C), navigation (Up/Down/Tab), and function keys.
-    #[tool(description = "Send named keystrokes to a terminal session. Use for control keys (Ctrl+C), navigation (Up/Down/Tab), and function keys (F1). For typing text, use send_text instead.")]
+    #[tool(
+        description = "Send named keystrokes to a terminal session. Use for control keys (Ctrl+C), navigation (Up/Down/Tab), and function keys (F1). For typing text, use send_text instead."
+    )]
     async fn send_keys(
         &self,
         context: RequestContext<RoleServer>,
@@ -398,13 +422,17 @@ impl TerminalMcpServer {
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
                 Ok(CallToolResult::success(vec![Content::text(json)]))
             }
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!("send_keys error: {e:#}"))])),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "send_keys error: {e:#}"
+            ))])),
         }
     }
 
     /// Send input to a terminal and wait for expected output.
     /// Combines send_text + wait_for + read_output into one efficient call.
-    #[tool(description = "Send input to a terminal session and wait for expected output. This is the primary tool for command execution — type a command, wait for it to complete, and get the output. Combines send_text + wait_for + read_output into one efficient call.")]
+    #[tool(
+        description = "Send input to a terminal session and wait for expected output. This is the primary tool for command execution — type a command, wait for it to complete, and get the output. Combines send_text + wait_for + read_output into one efficient call."
+    )]
     async fn send_and_wait(
         &self,
         context: RequestContext<RoleServer>,
@@ -424,12 +452,16 @@ impl TerminalMcpServer {
         .await
         .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 
     /// Read new output from a terminal session since the last read.
     /// Best for following command output, logs, and streaming results.
-    #[tool(description = "Read new output from a terminal session since the last read. Returns raw text output (ANSI codes stripped). Best for following command output, logs, and streaming results. For TUI/full-screen apps, use get_screen instead.")]
+    #[tool(
+        description = "Read new output from a terminal session since the last read. Returns raw text output (ANSI codes stripped). Best for following command output, logs, and streaming results. For TUI/full-screen apps, use get_screen instead."
+    )]
     async fn read_output(
         &self,
         context: RequestContext<RoleServer>,
@@ -453,7 +485,9 @@ impl TerminalMcpServer {
 
     /// Get the current terminal screen contents as a text grid.
     /// Best for TUI apps, editors, debuggers, and any full-screen application.
-    #[tool(description = "Get the current terminal screen contents as a text grid. Returns the full visible buffer (e.g., 80x24). Best for TUI apps, editors, debuggers, and any full-screen application. For streaming command output, use read_output instead.")]
+    #[tool(
+        description = "Get the current terminal screen contents as a text grid. Returns the full visible buffer (e.g., 80x24). Best for TUI apps, editors, debuggers, and any full-screen application. For streaming command output, use read_output instead."
+    )]
     async fn get_screen(
         &self,
         context: RequestContext<RoleServer>,
@@ -481,7 +515,9 @@ impl TerminalMcpServer {
 
     /// Capture a PNG screenshot of the terminal screen.
     /// Renders with a monospace font preserving colors, bold, italic, underline.
-    #[tool(description = "Capture a PNG screenshot of the terminal screen. Renders with a monospace font preserving colors, bold, italic, underline. Returns an MCP image content block.")]
+    #[tool(
+        description = "Capture a PNG screenshot of the terminal screen. Renders with a monospace font preserving colors, bold, italic, underline. Returns an MCP image content block."
+    )]
     async fn screenshot(
         &self,
         context: RequestContext<RoleServer>,
@@ -512,8 +548,9 @@ impl TerminalMcpServer {
             })
             .await;
 
-        let png_bytes = png_bytes
-            .map_err(|e| McpError::internal_error(format!("Screenshot render failed: {e}"), None))?;
+        let png_bytes = png_bytes.map_err(|e| {
+            McpError::internal_error(format!("Screenshot render failed: {e}"), None)
+        })?;
 
         let (image_width, image_height) = png_dimensions(&png_bytes);
 
@@ -530,7 +567,9 @@ impl TerminalMcpServer {
     }
 
     /// Read scrollback buffer (content that has scrolled above the visible screen).
-    #[tool(description = "Read scrollback buffer (content that has scrolled above the visible screen). Useful for retrieving earlier command output or error messages.")]
+    #[tool(
+        description = "Read scrollback buffer (content that has scrolled above the visible screen). Useful for retrieving earlier command output or error messages."
+    )]
     async fn get_scrollback(
         &self,
         context: RequestContext<RoleServer>,
@@ -548,11 +587,15 @@ impl TerminalMcpServer {
         .await
         .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 
     /// Wait for a pattern or a target line count in terminal output. Does not send any input.
-    #[tool(description = "Wait for a pattern to appear in terminal output, or for a target number of new output lines. Does not send any input. Use for monitoring long-running processes, waiting for prompts, or detecting errors.")]
+    #[tool(
+        description = "Wait for a pattern to appear in terminal output, or for a target number of new output lines. Does not send any input. Use for monitoring long-running processes, waiting for prompts, or detecting errors."
+    )]
     async fn wait_for(
         &self,
         context: RequestContext<RoleServer>,
@@ -572,11 +615,15 @@ impl TerminalMcpServer {
         .await
         .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 
     /// Wait for the terminal to become idle based on output silence or screen stability.
-    #[tool(description = "Wait for the terminal to become idle (no new output for a specified duration). Optionally watch for the visible screen to stop changing instead, which is more reliable for some TUI apps. Use when you don't know the exact completion pattern.")]
+    #[tool(
+        description = "Wait for the terminal to become idle (no new output for a specified duration). Optionally watch for the visible screen to stop changing instead, which is more reliable for some TUI apps. Use when you don't know the exact completion pattern."
+    )]
     async fn wait_for_idle(
         &self,
         context: RequestContext<RoleServer>,
@@ -594,11 +641,15 @@ impl TerminalMcpServer {
         .await
         .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 
     /// Wait for the child process to exit and return its exit code.
-    #[tool(description = "Wait for the child process in a terminal session to exit. Returns the exit code. Use when you need to verify a process completed successfully.")]
+    #[tool(
+        description = "Wait for the child process in a terminal session to exit. Returns the exit code. Use when you need to verify a process completed successfully."
+    )]
     async fn wait_for_exit(
         &self,
         context: RequestContext<RoleServer>,
@@ -607,18 +658,19 @@ impl TerminalMcpServer {
         let p = &params.0;
         let session = self.visible_session(&p.session_id, &context)?;
 
-        let result = automation::handle_wait_for_exit(
-            &session,
-            p.timeout_ms.unwrap_or(30_000),
-        )
-        .await
-        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        let result = automation::handle_wait_for_exit(&session, p.timeout_ms.unwrap_or(30_000))
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        Ok(CallToolResult::success(vec![Content::text(result.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            result.to_string(),
+        )]))
     }
 
     /// Get detailed session metadata and capabilities.
-    #[tool(description = "Get detailed session metadata including PID, command, terminal size, status, and capabilities.")]
+    #[tool(
+        description = "Get detailed session metadata including PID, command, terminal size, status, and capabilities."
+    )]
     async fn get_session_info(
         &self,
         context: RequestContext<RoleServer>,
@@ -653,7 +705,9 @@ impl TerminalMcpServer {
     // -- Tier 3 -----------------------------------------------------------
 
     /// Search scrollback history using a regex pattern.
-    #[tool(description = "Search scrollback history using a regex pattern. Returns matching lines with surrounding context.")]
+    #[tool(
+        description = "Search scrollback history using a regex pattern. Returns matching lines with surrounding context."
+    )]
     async fn search_output(
         &self,
         context: RequestContext<RoleServer>,
@@ -689,19 +743,15 @@ impl ServerHandler for TerminalMcpServer {
         server_impl.name = "terminal-mcp".to_string();
         server_impl.version = env!("CARGO_PKG_VERSION").to_string();
 
-        ServerInfo::new(
-            ServerCapabilities::builder()
-                .enable_tools()
-                .build(),
-        )
-        .with_server_info(server_impl)
-        .with_instructions(
-            "MCP server for interactive terminal session management. \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(server_impl)
+            .with_instructions(
+                "MCP server for interactive terminal session management. \
              Create PTY sessions, send input, observe output, and automate \
              CLI interactions. Use create_session to start, send_and_wait for \
              command execution, and get_screen for TUI apps."
-                .to_string(),
-        )
+                    .to_string(),
+            )
     }
 
     async fn initialize(

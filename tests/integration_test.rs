@@ -49,7 +49,12 @@ async fn test_write_and_output() {
     let raw_text = String::from_utf8_lossy(&raw);
     let screen = session.get_screen_contents().await;
     let found = raw_text.contains("xyzzy_42") || screen.contains("xyzzy_42");
-    assert!(found, "marker not in output ({} bytes) or screen ({} chars)", raw.len(), screen.len());
+    assert!(
+        found,
+        "marker not in output ({} bytes) or screen ({} chars)",
+        raw.len(),
+        screen.len()
+    );
     drop(session);
     mgr.close_session(&info.session_id).await.unwrap();
 }
@@ -155,18 +160,18 @@ async fn test_send_keys_arrow_navigation() {
     session.write_bytes(b"abcdef").await.unwrap();
     sleep(Duration::from_millis(500)).await;
 
-    let left = terminal_mcp::keys::key_to_bytes(
-        "Left",
-        session.application_cursor().await,
-    )
-    .unwrap();
+    let left =
+        terminal_mcp::keys::key_to_bytes("Left", session.application_cursor().await).unwrap();
     session.write_bytes(&left).await.unwrap();
     sleep(Duration::from_millis(500)).await;
 
     // Verify cursor_position returns without error (values depend on
     // ConPTY output routing which varies by Windows version)
     let (row, col) = session.cursor_position().await;
-    assert!(row < 24 && col < 80, "Cursor should be within terminal bounds");
+    assert!(
+        row < 24 && col < 80,
+        "Cursor should be within terminal bounds"
+    );
 
     drop(session);
     mgr.close_session(&info.session_id).await.unwrap();
@@ -200,7 +205,11 @@ async fn test_concurrent_sessions() {
     assert!(!o2.is_empty(), "Session 2 should have output");
 
     // Sessions have independent PIDs
-    assert_ne!(s1.pid().await, s2.pid().await, "Sessions should have different PIDs");
+    assert_ne!(
+        s1.pid().await,
+        s2.pid().await,
+        "Sessions should have different PIDs"
+    );
 
     drop(s1);
     drop(s2);

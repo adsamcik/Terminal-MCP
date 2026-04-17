@@ -26,7 +26,9 @@ pub async fn handle_create_session(
         cols: params.cols.unwrap_or(80).clamp(1, MAX_COLS),
         scrollback: (params.scrollback.unwrap_or(1000) as usize).min(MAX_SCROLLBACK_LINES),
     };
-    let info = manager.create_session_async_for_owner(config, owner_key).await?;
+    let info = manager
+        .create_session_async_for_owner(config, owner_key)
+        .await?;
     Ok(serde_json::to_value(info)?)
 }
 

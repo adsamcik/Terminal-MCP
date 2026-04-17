@@ -480,10 +480,7 @@ mod tests {
         let parser = vt100::Parser::new(24, 80, 0);
         let screen = parser.screen();
         let status = si.is_at_prompt(screen);
-        assert_eq!(
-            status,
-            PromptStatus::Definite { exit_code: None }
-        );
+        assert_eq!(status, PromptStatus::Definite { exit_code: None });
     }
 
     // ── Additional tests ──────────────────────────────────────
@@ -591,10 +588,7 @@ mod tests {
         let parser = vt100::Parser::new(24, 80, 0);
         let screen = parser.screen();
         let status = si.is_at_prompt(screen);
-        assert_eq!(
-            status,
-            PromptStatus::Definite { exit_code: None }
-        );
+        assert_eq!(status, PromptStatus::Definite { exit_code: None });
     }
 
     #[test]

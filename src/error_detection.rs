@@ -35,21 +35,33 @@ const PATTERN_DEFS: &[(&str, &str)] = &[
     // rustc warning
     ("rustc warning", r"(?m)^warning(\[.+\])?:"),
     // TypeScript: "src/file.ts(10,5): error TS..."
-    ("typescript error", r"(?m)[^\s]+\.tsx?\(\d+,\d+\):\s+error\s+TS\d+:"),
+    (
+        "typescript error",
+        r"(?m)[^\s]+\.tsx?\(\d+,\d+\):\s+error\s+TS\d+:",
+    ),
     // .NET / MSBuild: "file.cs(10,5): error CS..."
-    ("dotnet error", r"(?m)[^\s]+\(\d+,\d+\):\s+error\s+[A-Z]+\d+:"),
+    (
+        "dotnet error",
+        r"(?m)[^\s]+\(\d+,\d+\):\s+error\s+[A-Z]+\d+:",
+    ),
     // .NET build failed
     ("dotnet build failed", r"(?mi)Build\s+FAILED"),
     // npm ERR!
     ("npm error", r"(?m)^npm\s+ERR!"),
     // Python traceback header
-    ("python traceback", r"(?m)^Traceback \(most recent call last\):"),
+    (
+        "python traceback",
+        r"(?m)^Traceback \(most recent call last\):",
+    ),
     // Python error line (e.g. "ValueError: ...")
     ("python error line", r"(?m)^[A-Za-z]*Error:\s"),
     // Java exception: "Exception in thread ..."
     ("java exception", r"(?m)Exception in thread\b"),
     // Java stack trace frame
-    ("java stack frame", r"(?m)^\s+at\s+[a-zA-Z0-9.$_]+\(.*\.java:\d+\)"),
+    (
+        "java stack frame",
+        r"(?m)^\s+at\s+[a-zA-Z0-9.$_]+\(.*\.java:\d+\)",
+    ),
     // Go error
     ("go error", r"(?m)^\.?/[^\s:]+\.go:\d+:\d+:"),
     // Generic "error:" (case-insensitive)
@@ -61,17 +73,29 @@ const PATTERN_DEFS: &[(&str, &str)] = &[
     // Generic "FATAL"
     ("generic FATAL", r"(?m)\bFATAL\b"),
     // Panic (Rust, Go, etc.)
-    ("generic panic", r"(?m)^thread\s+'[^']+'\s+panicked\s+at|^panic:"),
+    (
+        "generic panic",
+        r"(?m)^thread\s+'[^']+'\s+panicked\s+at|^panic:",
+    ),
     // Segfault / signal
-    ("segfault/signal", r"(?mi)Segmentation fault|SIGSEGV|SIGABRT|SIGBUS"),
+    (
+        "segfault/signal",
+        r"(?mi)Segmentation fault|SIGSEGV|SIGABRT|SIGBUS",
+    ),
     // Permission denied
     ("permission denied", r"(?mi)Permission denied"),
     // Command not found
-    ("command not found", r"(?mi)command not found|is not recognized"),
+    (
+        "command not found",
+        r"(?mi)command not found|is not recognized",
+    ),
     // No such file or directory
     ("no such file", r"(?mi)No such file or directory"),
     // Exit code
-    ("exit code nonzero", r"(?mi)exit(?:ed)?\s+(?:with\s+)?(?:status|code)\s+[1-9]\d*"),
+    (
+        "exit code nonzero",
+        r"(?mi)exit(?:ed)?\s+(?:with\s+)?(?:status|code)\s+[1-9]\d*",
+    ),
 ];
 
 // ── ErrorDetector ──────────────────────────────────────────────────
@@ -280,7 +304,11 @@ mod tests {
         let d = detector();
         assert!(d.has_errors(text));
         let matches = d.detect_errors(text);
-        assert!(matches.iter().any(|m| m.pattern_name == "gcc/clang warning"));
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name == "gcc/clang warning")
+        );
     }
 
     #[test]
@@ -307,7 +335,11 @@ mod tests {
         let d = detector();
         assert!(d.has_errors(text));
         let matches = d.detect_errors(text);
-        assert!(matches.iter().any(|m| m.pattern_name == "dotnet build failed"));
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name == "dotnet build failed")
+        );
     }
 
     #[test]
@@ -316,7 +348,11 @@ mod tests {
         let d = detector();
         assert!(d.has_errors(text));
         let matches = d.detect_errors(text);
-        assert!(matches.iter().any(|m| m.pattern_name == "python error line"));
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name == "python error line")
+        );
     }
 
     #[test]
@@ -370,7 +406,11 @@ mod tests {
         let d = detector();
         assert!(d.has_errors(text));
         let matches = d.detect_errors(text);
-        assert!(matches.iter().any(|m| m.pattern_name == "permission denied"));
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name == "permission denied")
+        );
     }
 
     #[test]
@@ -379,7 +419,11 @@ mod tests {
         let d = detector();
         assert!(d.has_errors(text));
         let matches = d.detect_errors(text);
-        assert!(matches.iter().any(|m| m.pattern_name == "command not found"));
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name == "command not found")
+        );
     }
 
     #[test]
@@ -397,7 +441,11 @@ mod tests {
         let d = detector();
         assert!(d.has_errors(text));
         let matches = d.detect_errors(text);
-        assert!(matches.iter().any(|m| m.pattern_name == "exit code nonzero"));
+        assert!(
+            matches
+                .iter()
+                .any(|m| m.pattern_name == "exit code nonzero")
+        );
     }
 
     #[test]
@@ -414,7 +462,9 @@ mod tests {
         // "exit code 0" should NOT match (pattern requires [1-9])
         let matches = d.detect_errors(text);
         assert!(
-            !matches.iter().any(|m| m.pattern_name == "exit code nonzero"),
+            !matches
+                .iter()
+                .any(|m| m.pattern_name == "exit code nonzero"),
             "exit code 0 should not match"
         );
     }
@@ -430,7 +480,10 @@ mod tests {
     fn error_score_nonzero_exit_code_contributes() {
         let d = detector();
         let score = d.error_score("some output", Some(1));
-        assert!(score >= 20, "nonzero exit should contribute at least 20, got {score}");
+        assert!(
+            score >= 20,
+            "nonzero exit should contribute at least 20, got {score}"
+        );
     }
 
     #[test]
@@ -450,7 +503,10 @@ mod tests {
         let d = detector();
         let text = "error[E0308]: mismatch\nnpm ERR! failed\nTraceback (most recent call last):";
         let score = d.error_score(text, Some(0));
-        assert!(score > 20, "diverse patterns should produce high score, got {score}");
+        assert!(
+            score > 20,
+            "diverse patterns should produce high score, got {score}"
+        );
     }
 
     #[test]

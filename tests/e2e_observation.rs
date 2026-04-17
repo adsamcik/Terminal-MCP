@@ -62,11 +62,17 @@ async fn setup_session(
 async fn setup_hidden_cursor_session(
     mgr: &SessionManager,
 ) -> (String, std::sync::Arc<terminal_mcp::session::Session>) {
-    let info = mgr.create_session_async(hidden_cursor_config()).await.unwrap();
+    let info = mgr
+        .create_session_async(hidden_cursor_config())
+        .await
+        .unwrap();
     let session = mgr.get_session(&info.session_id).unwrap();
 
     for _ in 0..30 {
-        if session.get_screen_contents().await.contains("CURSOR_HIDDEN")
+        if session
+            .get_screen_contents()
+            .await
+            .contains("CURSOR_HIDDEN")
             && !session.cursor_visible().await
         {
             let _ = session.read_new_output().await;

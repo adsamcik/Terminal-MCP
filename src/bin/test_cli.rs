@@ -221,8 +221,7 @@ async fn handle_keys(mgr: &SessionManager, line: &str) -> anyhow::Result<()> {
     let session_id = tokens[1];
     let key_names: Vec<String> = tokens[2..].iter().map(|s| s.to_string()).collect();
     let session = mgr.get_session(session_id)?;
-    let result =
-        terminal_mcp::tools::input::handle_send_keys(&session, &key_names).await?;
+    let result = terminal_mcp::tools::input::handle_send_keys(&session, &key_names).await?;
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }
@@ -230,8 +229,7 @@ async fn handle_keys(mgr: &SessionManager, line: &str) -> anyhow::Result<()> {
 async fn handle_read(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<()> {
     let session_id = require_session_id(parts)?;
     let rest = parts.get(2).copied().unwrap_or("");
-    let timeout = parse_flag(rest, "--timeout")
-        .and_then(|v| v.parse::<u64>().ok());
+    let timeout = parse_flag(rest, "--timeout").and_then(|v| v.parse::<u64>().ok());
     let session = mgr.get_session(session_id)?;
     let resp = observation::handle_read_output(&session, timeout, None).await?;
     if resp.output.is_empty() {
@@ -242,7 +240,10 @@ async fn handle_read(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<()>
             println!();
         }
     }
-    println!("--- bytes_read={} idle={}ms ---", resp.bytes_read, resp.idle_duration_ms);
+    println!(
+        "--- bytes_read={} idle={}ms ---",
+        resp.bytes_read, resp.idle_duration_ms
+    );
     Ok(())
 }
 
@@ -257,9 +258,7 @@ async fn handle_screen(mgr: &SessionManager, line: &str) -> anyhow::Result<()> {
 
     let session = mgr.get_session(session_id)?;
     let resp = session
-        .with_vt(|vt| {
-            observation::get_screen(vt, true, include_colors, None, diff_mode)
-        })
+        .with_vt(|vt| observation::get_screen(vt, true, include_colors, None, diff_mode))
         .await;
     println!("{}", resp.screen);
     println!(
@@ -301,13 +300,8 @@ async fn handle_scrollback(mgr: &SessionManager, line: &str) -> anyhow::Result<(
     let search = parse_flag(line, "--search");
 
     let session = mgr.get_session(session_id)?;
-    let result = observation::handle_get_scrollback(
-        &session,
-        lines,
-        search.as_deref(),
-        None,
-    )
-    .await?;
+    let result =
+        observation::handle_get_scrollback(&session, lines, search.as_deref(), None).await?;
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }
@@ -324,7 +318,8 @@ async fn handle_wait(mgr: &SessionManager, line: &str) -> anyhow::Result<()> {
         .unwrap_or(30000);
 
     let session = mgr.get_session(session_id)?;
-    let result = automation::handle_wait_for(&session, Some(pattern), None, timeout, false, false).await?;
+    let result =
+        automation::handle_wait_for(&session, Some(pattern), None, timeout, false, false).await?;
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }
@@ -357,11 +352,9 @@ async fn handle_exec(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<()>
 
     let session = mgr.get_session(session_id)?;
     let result = automation::handle_send_and_wait(
-        &session,
-        command,
-        true,  // press_enter
-        None,  // no pattern → idle detection
-        2000,  // 2s timeout
+        &session, command, true,   // press_enter
+        None,   // no pattern → idle detection
+        2000,   // 2s timeout
         "both", // return both delta and screen
     )
     .await?;
@@ -405,7 +398,10 @@ async fn handle_search(mgr: &SessionManager, parts: &[&str]) -> anyhow::Result<(
         println!("No matches found.");
     } else {
         for m in &matches {
-            println!("  line {}: {} [match: {}]", m.line_number, m.line, m.match_text);
+            println!(
+                "  line {}: {} [match: {}]",
+                m.line_number, m.line, m.match_text
+            );
         }
         println!("--- {} match(es) ---", matches.len());
     }

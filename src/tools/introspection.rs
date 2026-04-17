@@ -61,62 +61,144 @@ pub fn default_capabilities() -> SessionCapabilities {
     SessionCapabilities {
         supported_keys: vec![
             // Arrow keys
-            "Up", "Down", "Left", "Right",
+            "Up",
+            "Down",
+            "Left",
+            "Right",
             // Navigation
-            "Home", "End", "PageUp", "PageDown", "Insert", "Delete",
+            "Home",
+            "End",
+            "PageUp",
+            "PageDown",
+            "Insert",
+            "Delete",
             // Whitespace / editing
-            "Enter", "Tab", "Escape", "Backspace", "Space",
+            "Enter",
+            "Tab",
+            "Escape",
+            "Backspace",
+            "Space",
             // Function keys
-            "F1", "F2", "F3", "F4", "F5", "F6",
-            "F7", "F8", "F9", "F10", "F11", "F12",
+            "F1",
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "F11",
+            "F12",
             // Ctrl+letter (A–Z)
-            "Ctrl+A", "Ctrl+B", "Ctrl+C", "Ctrl+D", "Ctrl+E", "Ctrl+F",
-            "Ctrl+G", "Ctrl+H", "Ctrl+I", "Ctrl+J", "Ctrl+K", "Ctrl+L",
-            "Ctrl+M", "Ctrl+N", "Ctrl+O", "Ctrl+P", "Ctrl+Q", "Ctrl+R",
-            "Ctrl+S", "Ctrl+T", "Ctrl+U", "Ctrl+V", "Ctrl+W", "Ctrl+X",
-            "Ctrl+Y", "Ctrl+Z",
+            "Ctrl+A",
+            "Ctrl+B",
+            "Ctrl+C",
+            "Ctrl+D",
+            "Ctrl+E",
+            "Ctrl+F",
+            "Ctrl+G",
+            "Ctrl+H",
+            "Ctrl+I",
+            "Ctrl+J",
+            "Ctrl+K",
+            "Ctrl+L",
+            "Ctrl+M",
+            "Ctrl+N",
+            "Ctrl+O",
+            "Ctrl+P",
+            "Ctrl+Q",
+            "Ctrl+R",
+            "Ctrl+S",
+            "Ctrl+T",
+            "Ctrl+U",
+            "Ctrl+V",
+            "Ctrl+W",
+            "Ctrl+X",
+            "Ctrl+Y",
+            "Ctrl+Z",
             // Ctrl+punctuation
-            "Ctrl+[", "Ctrl+\\", "Ctrl+]", "Ctrl+^", "Ctrl+_",
+            "Ctrl+[",
+            "Ctrl+\\",
+            "Ctrl+]",
+            "Ctrl+^",
+            "Ctrl+_",
             // Alt+letter (common readline/shell bindings)
-            "Alt+A", "Alt+B", "Alt+C", "Alt+D", "Alt+E", "Alt+F",
-            "Alt+G", "Alt+H", "Alt+I", "Alt+J", "Alt+K", "Alt+L",
-            "Alt+M", "Alt+N", "Alt+O", "Alt+P", "Alt+Q", "Alt+R",
-            "Alt+S", "Alt+T", "Alt+U", "Alt+V", "Alt+W", "Alt+X",
-            "Alt+Y", "Alt+Z",
-            "Alt+.", "Alt+Enter",
+            "Alt+A",
+            "Alt+B",
+            "Alt+C",
+            "Alt+D",
+            "Alt+E",
+            "Alt+F",
+            "Alt+G",
+            "Alt+H",
+            "Alt+I",
+            "Alt+J",
+            "Alt+K",
+            "Alt+L",
+            "Alt+M",
+            "Alt+N",
+            "Alt+O",
+            "Alt+P",
+            "Alt+Q",
+            "Alt+R",
+            "Alt+S",
+            "Alt+T",
+            "Alt+U",
+            "Alt+V",
+            "Alt+W",
+            "Alt+X",
+            "Alt+Y",
+            "Alt+Z",
+            "Alt+.",
+            "Alt+Enter",
             // Shift combos
             "Shift+Tab",
-            "Shift+Up", "Shift+Down", "Shift+Left", "Shift+Right",
-            "Shift+Home", "Shift+End",
-            "Shift+F1", "Shift+F2", "Shift+F3", "Shift+F4",
-            "Shift+F5", "Shift+F6", "Shift+F7", "Shift+F8",
-            "Shift+F9", "Shift+F10", "Shift+F11", "Shift+F12",
+            "Shift+Up",
+            "Shift+Down",
+            "Shift+Left",
+            "Shift+Right",
+            "Shift+Home",
+            "Shift+End",
+            "Shift+F1",
+            "Shift+F2",
+            "Shift+F3",
+            "Shift+F4",
+            "Shift+F5",
+            "Shift+F6",
+            "Shift+F7",
+            "Shift+F8",
+            "Shift+F9",
+            "Shift+F10",
+            "Shift+F11",
+            "Shift+F12",
             // Ctrl+arrow / Ctrl+nav
-            "Ctrl+Up", "Ctrl+Down", "Ctrl+Left", "Ctrl+Right",
-            "Ctrl+Home", "Ctrl+End",
+            "Ctrl+Up",
+            "Ctrl+Down",
+            "Ctrl+Left",
+            "Ctrl+Right",
+            "Ctrl+Home",
+            "Ctrl+End",
             // Ctrl+Shift combos
-            "Ctrl+Shift+Up", "Ctrl+Shift+Down",
-            "Ctrl+Shift+Left", "Ctrl+Shift+Right",
+            "Ctrl+Shift+Up",
+            "Ctrl+Shift+Down",
+            "Ctrl+Shift+Left",
+            "Ctrl+Shift+Right",
         ]
         .into_iter()
         .map(String::from)
         .collect(),
 
-        modifier_combos: vec![
-            "Ctrl+", "Alt+", "Shift+", "Ctrl+Shift+", "Ctrl+Alt+",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
+        modifier_combos: vec!["Ctrl+", "Alt+", "Shift+", "Ctrl+Shift+", "Ctrl+Alt+"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
 
-        special_sequences: vec![
-            "BracketedPaste",
-            "FocusEvents",
-            "MouseSGR",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
+        special_sequences: vec!["BracketedPaste", "FocusEvents", "MouseSGR"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
     }
 }
 
@@ -256,7 +338,13 @@ mod tests {
         let vt = VtParser::new(24, 80, 0);
         let resp = build_session_info(&info, &vt, &["-la".into()], Some("/home"), 500, "active");
         assert_eq!(resp.status, "exited(0)");
-        assert_eq!(resp.args, vec!["la".to_string()].iter().map(|_| "-la".to_string()).collect::<Vec<_>>());
+        assert_eq!(
+            resp.args,
+            vec!["la".to_string()]
+                .iter()
+                .map(|_| "-la".to_string())
+                .collect::<Vec<_>>()
+        );
         assert_eq!(resp.cwd, Some("/home".into()));
     }
 
@@ -276,10 +364,7 @@ mod tests {
         let caps = default_capabilities();
         for ch in 'A'..='Z' {
             let key = format!("Ctrl+{ch}");
-            assert!(
-                caps.supported_keys.contains(&key),
-                "missing: {key}"
-            );
+            assert!(caps.supported_keys.contains(&key), "missing: {key}");
         }
     }
 
@@ -288,10 +373,7 @@ mod tests {
         let caps = default_capabilities();
         for i in 1..=12 {
             let key = format!("F{i}");
-            assert!(
-                caps.supported_keys.contains(&key),
-                "missing: {key}"
-            );
+            assert!(caps.supported_keys.contains(&key), "missing: {key}");
         }
     }
 
@@ -329,7 +411,10 @@ mod tests {
     #[test]
     fn capabilities_special_sequences() {
         let caps = default_capabilities();
-        assert!(caps.special_sequences.contains(&"BracketedPaste".to_string()));
+        assert!(
+            caps.special_sequences
+                .contains(&"BracketedPaste".to_string())
+        );
         assert!(caps.special_sequences.contains(&"MouseSGR".to_string()));
     }
 

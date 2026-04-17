@@ -2,7 +2,7 @@
 <!--
 context-init:version: 1.0
 context-init:generated: 2026-04-12
-context-init:source: C:\Users\adam-\.copilot\session-state\89565177-073a-48e6-87b1-ddae00fb011b\files\project-model.json
+context-init:source: .github/context/project-model.json
 context-init:scope: github-copilot
 -->
 

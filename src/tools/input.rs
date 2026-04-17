@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde_json::json;
 
 use crate::keys::key_to_bytes;
@@ -20,7 +20,10 @@ pub async fn handle_send_text(
     delay_between_ms: Option<u64>,
 ) -> Result<serde_json::Value> {
     if text.len() > MAX_SEND_TEXT_BYTES {
-        anyhow::bail!("send_text input exceeds maximum size of {} bytes", MAX_SEND_TEXT_BYTES);
+        anyhow::bail!(
+            "send_text input exceeds maximum size of {} bytes",
+            MAX_SEND_TEXT_BYTES
+        );
     }
 
     let default_typed_delay = delay_between_ms
@@ -52,19 +55,18 @@ pub async fn handle_send_text(
 
 /// Send a sequence of named keystrokes (e.g. "Ctrl+C", "Up", "Enter") to
 /// a session, translating each to VT escape sequences.
-pub async fn handle_send_keys(
-    session: &Session,
-    keys: &[String],
-) -> Result<serde_json::Value> {
+pub async fn handle_send_keys(session: &Session, keys: &[String]) -> Result<serde_json::Value> {
     if keys.len() > MAX_KEYS_COUNT {
-        anyhow::bail!("send_keys exceeds maximum of {} keys per call", MAX_KEYS_COUNT);
+        anyhow::bail!(
+            "send_keys exceeds maximum of {} keys per call",
+            MAX_KEYS_COUNT
+        );
     }
 
     let app_cursor = session.application_cursor().await;
     let mut total = 0usize;
     for key in keys {
-        let bytes = key_to_bytes(key, app_cursor)
-            .ok_or_else(|| anyhow!("Unknown key: {}", key))?;
+        let bytes = key_to_bytes(key, app_cursor).ok_or_else(|| anyhow!("Unknown key: {}", key))?;
         session.write_bytes(&bytes).await?;
         total += 1;
     }

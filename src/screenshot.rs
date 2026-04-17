@@ -52,42 +52,42 @@ pub fn get_theme(name: &str) -> Theme {
 
 // Dark theme – One Dark–inspired palette
 const DARK_PALETTE: [[u8; 4]; 16] = [
-    [40, 44, 52, 255],     // 0  black
-    [224, 108, 117, 255],  // 1  red
-    [152, 195, 121, 255],  // 2  green
-    [229, 192, 123, 255],  // 3  yellow
-    [97, 175, 239, 255],   // 4  blue
-    [198, 120, 221, 255],  // 5  magenta
-    [86, 182, 194, 255],   // 6  cyan
-    [171, 178, 191, 255],  // 7  white
-    [92, 99, 112, 255],    // 8  bright black
-    [224, 108, 117, 255],  // 9  bright red
-    [152, 195, 121, 255],  // 10 bright green
-    [229, 192, 123, 255],  // 11 bright yellow
-    [97, 175, 239, 255],   // 12 bright blue
-    [198, 120, 221, 255],  // 13 bright magenta
-    [86, 182, 194, 255],   // 14 bright cyan
-    [220, 223, 228, 255],  // 15 bright white
+    [40, 44, 52, 255],    // 0  black
+    [224, 108, 117, 255], // 1  red
+    [152, 195, 121, 255], // 2  green
+    [229, 192, 123, 255], // 3  yellow
+    [97, 175, 239, 255],  // 4  blue
+    [198, 120, 221, 255], // 5  magenta
+    [86, 182, 194, 255],  // 6  cyan
+    [171, 178, 191, 255], // 7  white
+    [92, 99, 112, 255],   // 8  bright black
+    [224, 108, 117, 255], // 9  bright red
+    [152, 195, 121, 255], // 10 bright green
+    [229, 192, 123, 255], // 11 bright yellow
+    [97, 175, 239, 255],  // 12 bright blue
+    [198, 120, 221, 255], // 13 bright magenta
+    [86, 182, 194, 255],  // 14 bright cyan
+    [220, 223, 228, 255], // 15 bright white
 ];
 
 // Light theme – VS Code light–inspired palette
 const LIGHT_PALETTE: [[u8; 4]; 16] = [
-    [0, 0, 0, 255],        // 0  black
-    [205, 49, 49, 255],    // 1  red
-    [0, 135, 0, 255],      // 2  green
-    [128, 128, 0, 255],    // 3  yellow
-    [0, 0, 200, 255],      // 4  blue
-    [188, 63, 188, 255],   // 5  magenta
-    [17, 168, 205, 255],   // 6  cyan
-    [229, 229, 229, 255],  // 7  white
-    [102, 102, 102, 255],  // 8  bright black
-    [241, 76, 76, 255],    // 9  bright red
-    [35, 209, 35, 255],    // 10 bright green
-    [245, 245, 67, 255],   // 11 bright yellow
-    [59, 142, 234, 255],   // 12 bright blue
-    [214, 112, 214, 255],  // 13 bright magenta
-    [41, 184, 219, 255],   // 14 bright cyan
-    [255, 255, 255, 255],  // 15 bright white
+    [0, 0, 0, 255],       // 0  black
+    [205, 49, 49, 255],   // 1  red
+    [0, 135, 0, 255],     // 2  green
+    [128, 128, 0, 255],   // 3  yellow
+    [0, 0, 200, 255],     // 4  blue
+    [188, 63, 188, 255],  // 5  magenta
+    [17, 168, 205, 255],  // 6  cyan
+    [229, 229, 229, 255], // 7  white
+    [102, 102, 102, 255], // 8  bright black
+    [241, 76, 76, 255],   // 9  bright red
+    [35, 209, 35, 255],   // 10 bright green
+    [245, 245, 67, 255],  // 11 bright yellow
+    [59, 142, 234, 255],  // 12 bright blue
+    [214, 112, 214, 255], // 13 bright magenta
+    [41, 184, 219, 255],  // 14 bright cyan
+    [255, 255, 255, 255], // 15 bright white
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -114,12 +114,7 @@ fn ansi256_to_rgba(idx: u8, theme: &Theme) -> [u8; 4] {
 
 /// Resolve a `vt100::Color` to RGBA bytes, considering the theme and bold
 /// brightening (for foreground colors with indices 0–7).
-fn resolve_color(
-    color: vt100::Color,
-    is_fg: bool,
-    bold: bool,
-    theme: &Theme,
-) -> [u8; 4] {
+fn resolve_color(color: vt100::Color, is_fg: bool, bold: bool, theme: &Theme) -> [u8; 4] {
     match color {
         vt100::Color::Default => {
             if is_fg {
@@ -152,7 +147,13 @@ fn fill_rect(pixmap: &mut Pixmap, x: u32, y: u32, w: u32, h: u32, rgba: [u8; 4])
     let mut paint = Paint::default();
     paint.set_color(Color::from_rgba8(rgba[0], rgba[1], rgba[2], rgba[3]));
     paint.anti_alias = false;
-    pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+    pixmap.fill_path(
+        &path,
+        &paint,
+        FillRule::Winding,
+        Transform::identity(),
+        None,
+    );
 }
 
 // ── Cached font parsing ───────────────────────────────────────────────────
@@ -169,8 +170,7 @@ fn get_regular_font() -> &'static Font {
 
 fn get_bold_font() -> &'static Font {
     FONT_BOLD_PARSED.get_or_init(|| {
-        Font::from_bytes(FONT_BOLD, FontSettings::default())
-            .expect("embedded bold font is valid")
+        Font::from_bytes(FONT_BOLD, FontSettings::default()).expect("embedded bold font is valid")
     })
 }
 
@@ -192,13 +192,18 @@ pub fn preflight_screenshot(rows: u16, cols: u16, font_size: u32, scale: f32) ->
     let est_cell_w = (px_size * 0.65_f32).ceil().max(1.0) as u64;
     let est_cell_h = (px_size * 1.25_f32).ceil().max(1.0) as u64;
     let padding = ((8.0_f32 * scale).ceil() as u64) * 2;
-    let est_pixels = (est_cell_w * cols as u64 + padding)
-        .saturating_mul(est_cell_h * rows as u64 + padding);
+    let est_pixels =
+        (est_cell_w * cols as u64 + padding).saturating_mul(est_cell_h * rows as u64 + padding);
     if est_pixels > MAX_SCREENSHOT_PIXELS as u64 {
         anyhow::bail!(
             "Screenshot would exceed pixel budget of {} pixels \
              (estimated ~{} px for {}×{} terminal at font size {} scale {:.1})",
-            MAX_SCREENSHOT_PIXELS, est_pixels, cols, rows, font_size, scale
+            MAX_SCREENSHOT_PIXELS,
+            est_pixels,
+            cols,
+            rows,
+            font_size,
+            scale
         );
     }
     Ok(())
@@ -236,7 +241,12 @@ pub fn render_screenshot(
     if est_pixels > MAX_SCREENSHOT_PIXELS as u64 {
         anyhow::bail!(
             "Screenshot would exceed pixel budget of {} pixels (estimated ~{} px for {}×{} terminal at font size {} scale {:.1})",
-            MAX_SCREENSHOT_PIXELS, est_pixels, cols, rows, font_size, scale
+            MAX_SCREENSHOT_PIXELS,
+            est_pixels,
+            cols,
+            rows,
+            font_size,
+            scale
         );
     }
 
@@ -248,14 +258,14 @@ pub fn render_screenshot(
     // -- Cell geometry -------------------------------------------------------
     // Use metrics from the font to derive cell sizes.
 
-    let metrics = font_regular.horizontal_line_metrics(px_size).unwrap_or(
-        fontdue::LineMetrics {
+    let metrics = font_regular
+        .horizontal_line_metrics(px_size)
+        .unwrap_or(fontdue::LineMetrics {
             ascent: px_size * 0.8,
             descent: px_size * -0.2,
             line_gap: 0.0,
             new_line_size: px_size * 1.2,
-        },
-    );
+        });
 
     // Measure a reference character to get the advance width.
     let (m_metrics, _) = font_regular.rasterize('M', px_size);
@@ -275,7 +285,8 @@ pub fn render_screenshot(
     if img_width.saturating_mul(img_height) > MAX_SCREENSHOT_PIXELS {
         anyhow::bail!(
             "Screenshot dimensions {}×{} ({} pixels) exceed budget of {} pixels",
-            img_width, img_height,
+            img_width,
+            img_height,
             img_width.saturating_mul(img_height),
             MAX_SCREENSHOT_PIXELS
         );
@@ -350,7 +361,8 @@ pub fn render_screenshot(
 
             // Position the glyph within the cell
             let glyph_x = cell_x as i32 + glyph_metrics.xmin;
-            let glyph_y = cell_y as i32 + baseline - glyph_metrics.height as i32 - glyph_metrics.ymin;
+            let glyph_y =
+                cell_y as i32 + baseline - glyph_metrics.height as i32 - glyph_metrics.ymin;
 
             // Paint glyph pixels onto pixmap
             paint_glyph(

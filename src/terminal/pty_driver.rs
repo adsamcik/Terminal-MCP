@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{Child, ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tokio::sync::mpsc;
 use tracing;
 
@@ -238,38 +238,39 @@ impl PtyDriver {
         let child = Arc::clone(&self.child);
         let killer = Arc::clone(&self.killer);
 
-        let status = tokio::task::spawn_blocking(move || -> Result<Option<portable_pty::ExitStatus>> {
-            let mut child_guard = child
-                .lock()
-                .map_err(|e| anyhow::anyhow!("Child lock poisoned: {e}"))?;
+        let status =
+            tokio::task::spawn_blocking(move || -> Result<Option<portable_pty::ExitStatus>> {
+                let mut child_guard = child
+                    .lock()
+                    .map_err(|e| anyhow::anyhow!("Child lock poisoned: {e}"))?;
 
-            // Check if already exited
-            match child_guard.try_wait() {
-                Ok(Some(status)) => return Ok(Some(status)),
-                Ok(None) => {}
-                Err(e) => {
-                    tracing::warn!(error = %e, "Error checking child status");
+                // Check if already exited
+                match child_guard.try_wait() {
+                    Ok(Some(status)) => return Ok(Some(status)),
+                    Ok(None) => {}
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Error checking child status");
+                    }
                 }
-            }
 
-            // Kill the child
-            if let Ok(mut k) = killer.lock() {
-                if let Err(e) = k.kill() {
-                    tracing::warn!(error = %e, "Error killing child process");
+                // Kill the child
+                if let Ok(mut k) = killer.lock() {
+                    if let Err(e) = k.kill() {
+                        tracing::warn!(error = %e, "Error killing child process");
+                    }
                 }
-            }
 
-            // Wait for exit
-            match child_guard.wait() {
-                Ok(status) => Ok(Some(status)),
-                Err(e) => {
-                    tracing::warn!(error = %e, "Error waiting for child exit");
-                    Ok(None)
+                // Wait for exit
+                match child_guard.wait() {
+                    Ok(status) => Ok(Some(status)),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Error waiting for child exit");
+                        Ok(None)
+                    }
                 }
-            }
-        })
-        .await
-        .context("Close task panicked")??;
+            })
+            .await
+            .context("Close task panicked")??;
 
         Ok(status)
     }

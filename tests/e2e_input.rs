@@ -13,9 +13,7 @@ use tokio::time::sleep;
 // Helper
 // ---------------------------------------------------------------------------
 
-async fn create_cmd_session(
-    mgr: &SessionManager,
-) -> (String, Arc<Session>) {
+async fn create_cmd_session(mgr: &SessionManager) -> (String, Arc<Session>) {
     let config = SessionConfig {
         command: Some("cmd.exe".to_string()),
         ..Default::default()
@@ -23,10 +21,7 @@ async fn create_cmd_session(
     create_session(mgr, config).await
 }
 
-async fn create_session(
-    mgr: &SessionManager,
-    config: SessionConfig,
-) -> (String, Arc<Session>) {
+async fn create_session(mgr: &SessionManager, config: SessionConfig) -> (String, Arc<Session>) {
     let info = mgr.create_session_async(config).await.unwrap();
     let session = mgr.get_session(&info.session_id).unwrap();
     sleep(Duration::from_secs(2)).await;
@@ -192,7 +187,9 @@ async fn send_text_special_characters() {
 
     // Quotes, backslashes, pipes — should all be sent as raw bytes
     let special = r#"echo "hello" | echo world & echo back\slash"#;
-    let result = handle_send_text(&session, special, true, None).await.unwrap();
+    let result = handle_send_text(&session, special, true, None)
+        .await
+        .unwrap();
     assert_eq!(result["status"], "ok");
     assert!(result["sent"].as_u64().unwrap() > 0);
 
@@ -307,11 +304,7 @@ async fn send_keys_function_keys() {
     let mgr = SessionManager::new();
     let (sid, session) = create_cmd_session(&mgr).await;
 
-    let keys = vec![
-        "F1".to_string(),
-        "F5".to_string(),
-        "F12".to_string(),
-    ];
+    let keys = vec!["F1".to_string(), "F5".to_string(), "F12".to_string()];
     let result = handle_send_keys(&session, &keys).await.unwrap();
     assert_eq!(result["status"], "ok");
     assert_eq!(result["sent"].as_u64().unwrap(), 3);
@@ -333,10 +326,7 @@ async fn send_keys_ctrl_c_interrupt() {
     assert_eq!(result["sent"].as_u64().unwrap(), 1);
 
     sleep(Duration::from_secs(1)).await;
-    assert!(
-        session.is_alive().await,
-        "cmd.exe should survive Ctrl+C"
-    );
+    assert!(session.is_alive().await, "cmd.exe should survive Ctrl+C");
 
     drop(session);
     mgr.close_session(&sid).await.unwrap();
@@ -388,10 +378,7 @@ async fn send_keys_alt_combos() {
     // Alt+F and Alt+B map to Alt+<single letter> which won't resolve
     // because plain letters aren't in key_to_bytes mapping.
     // Test valid ones:
-    let keys = vec![
-        "Alt+Enter".to_string(),
-        "Alt+Tab".to_string(),
-    ];
+    let keys = vec!["Alt+Enter".to_string(), "Alt+Tab".to_string()];
     let result = handle_send_keys(&session, &keys).await.unwrap();
     assert_eq!(result["status"], "ok");
     assert_eq!(result["sent"].as_u64().unwrap(), 2);
@@ -410,10 +397,7 @@ async fn send_keys_unknown_key_error() {
 
     let keys = vec!["InvalidKeyXYZ".to_string()];
     let result = handle_send_keys(&session, &keys).await;
-    assert!(
-        result.is_err(),
-        "Unknown key should produce an error"
-    );
+    assert!(result.is_err(), "Unknown key should produce an error");
     let err_msg = result.unwrap_err().to_string();
     assert!(
         err_msg.contains("Unknown key"),
@@ -471,11 +455,7 @@ async fn send_keys_multiple_sequence() {
     let _ = session.read_new_output().await;
 
     // Send Up, Up, Enter as a sequence
-    let keys = vec![
-        "Up".to_string(),
-        "Up".to_string(),
-        "Enter".to_string(),
-    ];
+    let keys = vec!["Up".to_string(), "Up".to_string(), "Enter".to_string()];
     let result = handle_send_keys(&session, &keys).await.unwrap();
     assert_eq!(result["status"], "ok");
     assert_eq!(result["sent"].as_u64().unwrap(), 3);
@@ -548,10 +528,7 @@ async fn send_keys_ctrl_a_through_z_all_valid() {
     for ch in 'A'..='Z' {
         let key = format!("Ctrl+{ch}");
         let bytes = key_to_bytes(&key, false);
-        assert!(
-            bytes.is_some(),
-            "Ctrl+{ch} should produce valid bytes"
-        );
+        assert!(bytes.is_some(), "Ctrl+{ch} should produce valid bytes");
         assert_eq!(bytes.unwrap(), vec![ch as u8 - b'A' + 1]);
     }
 
@@ -595,7 +572,9 @@ async fn send_text_long_string() {
 
     // Send a long string (> typical line width)
     let long = "A".repeat(200);
-    let result = handle_send_text(&session, &long, false, None).await.unwrap();
+    let result = handle_send_text(&session, &long, false, None)
+        .await
+        .unwrap();
     assert_eq!(result["status"], "ok");
     assert_eq!(result["sent"].as_u64().unwrap(), 200);
 

@@ -2,7 +2,6 @@
 ///
 /// These spans are available for use in tool handlers and session lifecycle
 /// but are not yet wired into the codebase.
-
 use tracing::Span;
 
 #[allow(dead_code)]
