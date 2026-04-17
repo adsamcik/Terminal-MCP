@@ -6,7 +6,12 @@ use crate::session::Session;
 
 const MAX_SEND_TEXT_BYTES: usize = 1_048_576; // 1 MB
 const MAX_KEYS_COUNT: usize = 1_000;
-const DEFAULT_TYPED_CHARACTER_DELAY_MS: u64 = 5;
+// 15 ms per character keeps 100-char sends under 1.5 s while giving the
+// child process's event loop enough time to drain the PTY pipe between
+// writes on loaded CI runners. 5 ms proved unreliable on Windows ConPTY:
+// Node in raw mode would sometimes see the whole string as one chunk and
+// report it as a paste instead of typed input.
+const DEFAULT_TYPED_CHARACTER_DELAY_MS: u64 = 15;
 const DEFAULT_TYPED_DELAY_LIMIT_BYTES: usize = 4 * 1024;
 
 /// Write text to a session's PTY stdin, optionally pressing Enter afterwards.
