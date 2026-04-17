@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use terminal_mcp::session::{SessionConfig, SessionManager};
+use terminal_mcp::tools::automation::handle_send_and_wait;
 use terminal_mcp::tools::observation::{self, GetScreenResponse};
 use tokio::time::sleep;
 
@@ -181,19 +182,19 @@ async fn read_output_ansi_stripping() {
     let mgr = SessionManager::new();
     let (sid, session) = setup_session(&mgr).await;
 
-    session.write_bytes(b"echo ANSI_CHECK\r").await.unwrap();
-    sleep(Duration::from_secs(3)).await;
-
-    let resp = observation::handle_read_output(&session, Some(5000), None)
+    // Prompt-aware settle: hardened send_and_wait returns delta output
+    // (already ANSI-stripped) once the prompt returns, so we can assert on
+    // it directly without a fixed sleep + separate handle_read_output call.
+    let resp = handle_send_and_wait(&session, "echo ANSI_CHECK", true, None, 5_000, "delta")
         .await
         .unwrap();
+    let output = resp["output"].as_str().unwrap_or("");
     assert!(
-        !resp.output.contains('\x1b'),
-        "Output should have no ESC characters after ANSI stripping, got: {:?}",
-        resp.output
+        !output.contains('\x1b'),
+        "Output should have no ESC characters after ANSI stripping, got: {output:?}"
     );
     assert!(
-        resp.output.contains("ANSI_CHECK"),
+        output.contains("ANSI_CHECK"),
         "Output should still contain the command text"
     );
 
@@ -302,11 +303,18 @@ async fn get_screen_content_not_empty() {
     let mgr = SessionManager::new();
     let (sid, session) = setup_session(&mgr).await;
 
-    session
-        .write_bytes(b"echo SCREEN_CONTENT_TEST\r")
-        .await
-        .unwrap();
-    sleep(Duration::from_secs(3)).await;
+    // Prompt-aware settle: screen-mode send_and_wait waits for a meaningful
+    // screen change and then applies the settle window.
+    let _ = handle_send_and_wait(
+        &session,
+        "echo SCREEN_CONTENT_TEST",
+        true,
+        None,
+        5_000,
+        "screen",
+    )
+    .await
+    .unwrap();
 
     let resp = call_get_screen(&session, false, false, false).await;
     assert!(

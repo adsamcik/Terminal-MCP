@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-### Changed
-
 - CI now fails on new `cargo clippy` warnings (`-D warnings`).
 - Refreshed `file:line` citations in `.github/context/ARCHITECTURE.md` and
   `.github/context/PATTERNS.md` after formatter-driven reflow.
@@ -21,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - MSRV verification (`cargo check` on Rust 1.85) in CI.
 - Weekly `cargo audit` workflow (`.github/workflows/audit.yml`).
+- README: new Shell integration section with supported-shells matrix, `shell_integration_state` value meanings, and explicit limitations.
 - macOS release binaries: `aarch64-apple-darwin` and `x86_64-apple-darwin`.
 - SLSA-style build provenance attestations on all release artifacts (via
   `actions/attest-build-provenance`).
@@ -42,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regression tests for delayed output, bursty prompt-return, slow-start screen
   launches, streamed screen updates, screen stability timing, stale unread
   output, and hidden-cursor observation.
+
+### Changed
+
+- Replaced several `tokio::time::sleep`-based settlings in integration / E2E tests with prompt-aware `send_and_wait` calls, reducing timing-based flakiness. Tests remain Windows/`cmd.exe`-focused.
 
 ### Fixed
 

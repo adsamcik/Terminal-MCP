@@ -121,6 +121,7 @@ impl ShellIntegration {
             return;
         }
 
+        #[allow(clippy::collapsible_match, clippy::collapsible_if)]
         match parts[0] {
             "133" | "633" => {
                 // Mark integration as externally active

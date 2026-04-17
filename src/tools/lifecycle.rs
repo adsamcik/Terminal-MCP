@@ -72,7 +72,9 @@ mod tests {
 
     #[test]
     fn scrollback_clamped_to_max() {
-        assert_eq!(usize::MAX.min(MAX_SCROLLBACK_LINES), MAX_SCROLLBACK_LINES);
+        #[allow(clippy::unnecessary_min_or_max)]
+        let clamped = usize::MAX.min(MAX_SCROLLBACK_LINES);
+        assert_eq!(clamped, MAX_SCROLLBACK_LINES);
     }
 
     #[test]

@@ -128,6 +128,7 @@ impl PtyDriver {
         let reader = master
             .try_clone_reader()
             .context("Failed to obtain PTY reader")?;
+        #[cfg_attr(not(windows), allow(unused_mut))]
         let mut writer = master
             .take_writer()
             .context("Failed to obtain PTY writer")?;
