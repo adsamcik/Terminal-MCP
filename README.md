@@ -16,7 +16,7 @@ Built in Rust on top of [`portable-pty`](https://crates.io/crates/portable-pty) 
 - **3-layer shell prompt detection** — OSC 133/633 sequences, regex heuristics, cursor stability analysis
 - **Error pattern detection** — recognises compiler errors, stack traces, and common failure indicators
 - **TUI app support** — alternate screen detection, highlight/selection tracking, diff mode
-- **Idle session tracking** — idle durations are available for inspection, and the bundled server reaps sessions idle for more than 1 hour automatically
+- **Idle session tracking** — idle durations are available for inspection; opt into automatic eviction of idle sessions via `TERMINAL_MCP_IDLE_TIMEOUT` (disabled by default)
 
 ## Quick Start
 
@@ -49,6 +49,7 @@ Add to your MCP client config (e.g. `mcp.json`):
 | Environment Variable | Description | Default |
 |---|---|---|
 | `TERMINAL_MCP_LOG` | Tracing filter (e.g. `debug`, `terminal_mcp=trace`) | `info` |
+| `TERMINAL_MCP_IDLE_TIMEOUT` | When set, spawn a background task that evicts sessions idle longer than this duration. Accepts plain integer seconds (`3600`) or humantime strings (`1h`, `30m`, `90s`). Unparsable values log a warning and leave cleanup disabled. | unset (disabled) |
 
 ## Security / Trust Model
 
