@@ -554,14 +554,19 @@ The binary is at `target/release/terminal-mcp` (or `terminal-mcp.exe` on Windows
 cargo test
 ```
 
-## Design Documentation
+## Contributing
 
-The `docs/` directory contains research documents that informed the design:
+Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development setup, test commands, and PR checklist. This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
-- [`docs/research-interaction-patterns.md`](docs/research-interaction-patterns.md) — AI agent ↔ CLI interaction patterns, tool taxonomy, and protocol research
-- [`docs/research-tui-controls.md`](docs/research-tui-controls.md) — TUI input patterns, screen observation strategies, and navigation controls
-- [`docs/scrolling-navigation-research.md`](docs/scrolling-navigation-research.md) — Scrollback buffer design, navigation APIs, and key input encoding
+For security issues, please follow the private reporting process in [`SECURITY.md`](SECURITY.md) instead of opening a public issue.
 
 ## License
 
-MIT OR Apache-2.0
+Licensed under either of
+
+- Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([`LICENSE-MIT`](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this project by you, as defined in the Apache-2.0 license, shall be dual-licensed as above, without any additional terms or conditions.
