@@ -31,7 +31,11 @@ async fn create_session(mgr: &SessionManager, config: SessionConfig) -> (String,
 }
 
 async fn wait_for_output(session: &Session, needle: &str) -> String {
-    for _ in 0..20 {
+    wait_for_output_attempts(session, needle, 20).await
+}
+
+async fn wait_for_output_attempts(session: &Session, needle: &str, attempts: usize) -> String {
+    for _ in 0..attempts {
         let output = String::from_utf8_lossy(&session.get_full_output().await).to_string();
         if output.contains(needle) {
             return output;
@@ -233,16 +237,21 @@ process.stdin.on('data', chunk => {
     };
     let (sid, session) = create_session(&mgr, config).await;
 
+    // Wait for the node helper to print READY so its stdin listener is attached
+    // before we send any bytes. On GitHub Actions Windows runners node cold-start
+    // can take >5s; use an extended wait to avoid startup flakes.
+    let ready_output = wait_for_output_attempts(&session, "READY", 120).await;
+    assert!(
+        ready_output.contains("READY"),
+        "Expected node raw-input app to start, got:\n{ready_output}"
+    );
+
     let result = handle_send_text(&session, "abc", false, None)
         .await
         .unwrap();
     assert_eq!(result["status"], "ok");
 
     let output = wait_for_output(&session, "VALUE:abc").await;
-    assert!(
-        output.contains("READY"),
-        "Expected node raw-input app to start, got:\n{output}"
-    );
     assert!(
         output.contains("VALUE:abc"),
         "Expected raw text input to arrive character-by-character, got:\n{output}"
